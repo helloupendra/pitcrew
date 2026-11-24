@@ -47,7 +47,7 @@ export function CrewPage({ onError }: { onError: (e: unknown) => void }) {
         <h1>The crew</h1>
         <p className="muted">
           Specialist agents for any project. Run one from here, or add them to Claude Code with{' '}
-          <code>npx pitcrew crew install</code> and use <code>/qa</code>, <code>/review</code>, <code>/security</code>,{' '}
+          <code>npx pitcrew-cli crew install</code> and use <code>/qa</code>, <code>/review</code>, <code>/security</code>,{' '}
           <code>/tests</code>, <code>/docs</code> and <code>/deps</code> in your terminal.
         </p>
       </header>

@@ -13,12 +13,14 @@ import { ClaudeCodeSource, defaultRoot } from './sources/claude-code/source.js'
 const HELP = `pitcrew: a local pit wall for your coding agents
 
 Usage
-  npx pitcrew                      watch your Claude Code sessions
-  npx pitcrew --demo               try it with made-up sessions
-  npx pitcrew crew install         add the crew to Claude Code (~/.claude):
-                                   /qa /review /security /tests /docs /deps
-  npx pitcrew crew install --project <dir>   …to one project only
-  npx pitcrew crew list            show the crew
+  npx pitcrew-cli                      watch your Claude Code sessions
+  npx pitcrew-cli --demo               try it with made-up sessions
+  npx pitcrew-cli crew install         add the crew to Claude Code (~/.claude):
+                                       /qa /review /security /tests /docs /deps
+  npx pitcrew-cli crew install --project <dir>   …to one project only
+  npx pitcrew-cli crew list            show the crew
+
+  (After npm install -g pitcrew-cli, the command is just: pitcrew)
 
 Options
   --demo          use made-up sessions (nothing of yours is read)

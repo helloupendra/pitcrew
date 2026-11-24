@@ -14,8 +14,8 @@ Six specialist agents that come with Pitcrew. Each one is an ordinary Claude Cod
 ## Use them in Claude Code
 
 ```sh
-npx pitcrew crew install                    # for every project (~/.claude)
-npx pitcrew crew install --project ./myapp  # for one project (./myapp/.claude)
+npx pitcrew-cli crew install                    # for every project (~/.claude)
+npx pitcrew-cli crew install --project ./myapp  # for one project (./myapp/.claude)
 ```
 
 Then, in Claude Code: `/qa`, `/review the login change`, `/security`, or just "use the qa-tester agent". Files you already have are kept; `--force` replaces them.

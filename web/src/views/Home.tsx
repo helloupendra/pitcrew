@@ -29,7 +29,7 @@ export function Home({ onError }: { onError: (e: unknown) => void }) {
           by itself.
         </p>
         <p className="muted">
-          Want to look around first? Run <code>npx pitcrew --demo</code>.
+          Want to look around first? Run <code>npx pitcrew-cli --demo</code>.
         </p>
       </Message>
     )
