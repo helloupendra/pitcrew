@@ -15,9 +15,18 @@ import type { PlanItem, Step } from '../../core/types.js'
 
 const TEXT_MAX = 6_000
 const OUTPUT_MAX = 4_000
+/** Pictures kept for an opened session; the oldest go first. Listing sessions keeps none. */
+const PICTURE_BUDGET = 24 * 1024 * 1024
+const PICTURE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
+
+export interface Picture {
+  type: string
+  /** base64 */
+  data: string
+}
 
 /** Line types that are only bookkeeping. They start with {"type":"…" so they can be skipped unparsed. */
-const KEEP_TYPED = new Set(['ai-title', 'custom-title', 'cost-state', 'summary'])
+const KEEP_TYPED = new Set(['ai-title', 'custom-title', 'cost-state', 'summary', 'user', 'assistant', 'system'])
 const TYPED_PREFIX = /^\{"type":"([^"]+)"/
 
 export type LastEvent =
@@ -58,10 +67,29 @@ export class Parser {
   private readonly open = new Map<string, Step>()
   /** Results whose call lies before the part of the file that was read. */
   readonly orphans = new Map<string, ToolResult>()
+  /** Pictures by step id, when kept. */
+  readonly pictures = new Map<string, Picture[]>()
+  private pictureBytes = 0
   private seq: number
 
-  constructor(firstSeq = 0) {
+  constructor(
+    firstSeq = 0,
+    private readonly keepPictures = false,
+  ) {
     this.seq = firstSeq
+  }
+
+  private keep(stepId: string, blocks: unknown): number {
+    const found = picturesIn(blocks)
+    if (!found.length || !this.keepPictures) return found.length
+    this.pictures.set(stepId, found)
+    this.pictureBytes += found.reduce((n, p) => n + p.data.length, 0)
+    for (const [id, pics] of this.pictures) {
+      if (this.pictureBytes <= PICTURE_BUDGET) break
+      this.pictures.delete(id)
+      this.pictureBytes -= pics.reduce((n, p) => n + p.data.length, 0)
+    }
+    return found.length
   }
 
   get pending(): Step[] {
@@ -140,6 +168,7 @@ export class Parser {
     let images = 0
     for (const block of content as Json[]) {
       if (block?.type === 'tool_result') {
+        this.keep(String(block.tool_use_id), block.content)
         this.result(String(block.tool_use_id), {
           content: block.content,
           isError: block.is_error === true,
@@ -152,10 +181,12 @@ export class Parser {
         images++
       }
     }
-    if (texts.length || images) this.prompt(uuid, at, texts.join('\n\n'), images)
+    const shown = images ? this.keep(uuid, content) : 0
+    if (texts.length || images) this.prompt(uuid, at, texts.join('\n\n'), images, shown)
   }
 
-  private prompt(id: string, at: string, raw: string, images: number): void {
+  /** `images` is how many the message had; `shown` how many of them a browser can show. */
+  private prompt(id: string, at: string, raw: string, images: number, shown = 0): void {
     if (raw.trimStart().startsWith('[Request interrupted by user')) {
       this.add({ id, kind: 'note', at, title: 'You stopped the agent' })
       this.meta.last = { kind: 'stopped', why: 'you' }
@@ -172,7 +203,7 @@ export class Parser {
     if (images) text = [text, images === 1 ? '(an image)' : `(${images} images)`].filter(Boolean).join('\n')
     if (!text) return
     this.meta.firstPrompt ??= clip(oneLine(text), 200)
-    this.add({ id, kind: 'you', at, title: clip(oneLine(text), 140), text: clip(text, TEXT_MAX) })
+    this.add({ id, kind: 'you', at, title: clip(oneLine(text), 140), text: clip(text, TEXT_MAX), ...(shown ? { images: shown } : {}) })
     this.meta.last = { kind: 'prompt' }
   }
 
@@ -252,6 +283,7 @@ export class Parser {
     }
     for (const [id, r] of earlier.orphans) this.orphans.set(id, r)
     this.steps.unshift(...earlier.steps)
+    for (const [id, pics] of earlier.pictures) if (!this.pictures.has(id)) this.pictures.set(id, pics)
     this.meta.startedAt = earlier.meta.startedAt ?? this.meta.startedAt
     this.meta.firstPrompt = earlier.meta.firstPrompt ?? this.meta.firstPrompt
     this.meta.plan ??= earlier.meta.plan
@@ -348,6 +380,8 @@ function applyResult(step: Step, result: ToolResult): void {
   step.failed = result.isError || undefined
   const extra = result.extra
   const text = textOf(result.content)
+  const pictures = picturesIn(result.content).length
+  if (pictures) step.images = pictures
 
   switch (step.kind) {
     case 'run': {
@@ -395,6 +429,18 @@ export function cleanPrompt(raw: string): string {
     .replace(/<(system-reminder|ide_opened_file|ide_selection|local-command-caveat|local-command-stdout|local-command-stderr)\b[^>]*>[\s\S]*?<\/\1>/g, '')
     .replace(/<pasted_content\b[^>]*>([\s\S]*?)<\/pasted_content>/g, '$1')
     .trim()
+}
+
+/** Image blocks (base64) in a message or a tool result, in the types a browser shows. */
+function picturesIn(blocks: unknown): Picture[] {
+  if (!Array.isArray(blocks)) return []
+  const out: Picture[] = []
+  for (const b of blocks) {
+    if (!isObject(b) || b.type !== 'image' || !isObject(b.source)) continue
+    const { media_type: type, data } = b.source
+    if (typeof type === 'string' && PICTURE_TYPES.has(type) && typeof data === 'string') out.push({ type, data })
+  }
+  return out
 }
 
 function readPlan(todos: unknown): PlanItem[] {

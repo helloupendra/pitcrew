@@ -45,6 +45,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await res.json()) as T
 }
 
+/** A URL the browser loads by itself (an <img>), so the key rides along as ?t=. */
+export function withKey(path: string): string {
+  return `${path}${path.includes('?') ? '&' : '?'}t=${encodeURIComponent(token)}`
+}
+
 export function get<T>(path: string): Promise<T> {
   return request<T>(path)
 }

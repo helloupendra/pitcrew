@@ -4,7 +4,7 @@ import path from 'node:path'
 import { uncommittedFiles } from '../../core/git.js'
 import { readLines } from '../../core/lines.js'
 import type { ActivityItem, FileTouched, Overview, Project, SessionDetail, SessionStatus, SessionSummary, Step, StepKind } from '../../core/types.js'
-import { clip, Parser, type SessionMeta } from './parse.js'
+import { clip, Parser, type Picture, type SessionMeta } from './parse.js'
 import { statusOf } from './status.js'
 
 /** The first and last parts of a file are enough to list a session. */
@@ -237,6 +237,11 @@ export class ClaudeCodeSource {
     return this.files.has(id)
   }
 
+  /** A picture from an opened session: a screenshot the agent read, or an image you sent. */
+  picture(sessionId: string, stepId: string, k: number): Picture | undefined {
+    return this.readers.get(sessionId)?.parser.pictures.get(stepId)?.[k]
+  }
+
   /** Steps before step `before`, reading an earlier part of the file if needed. */
   async earlier(id: string, before: number, limit = FIRST_STEPS): Promise<{ steps: Step[]; hasEarlier: boolean } | undefined> {
     const info = this.files.get(id)
@@ -408,7 +413,7 @@ function filesTouched(steps: Step[]): FileTouched[] {
 
 /** An opened session: the latest part of its file, kept up to date as the agent writes. */
 class SessionReader {
-  parser = new Parser()
+  parser = new Parser(0, true)
   windowStart = 0
   private readTo = 0
   private queue: Promise<unknown> = Promise.resolve()
@@ -435,7 +440,7 @@ class SessionReader {
       }
       if (size < this.readTo) {
         // The file was replaced or cut: start over.
-        this.parser = new Parser()
+        this.parser = new Parser(0, true)
         this.readTo = 0
         this.windowStart = 0
       }
@@ -456,7 +461,7 @@ class SessionReader {
         start = Math.max(0, start - this.windowBytes)
         const chunk = await readLines(this.file, start, this.windowStart)
         if (!chunk.lines.length && start > 0) continue // one line longer than the window: read further back
-        const earlier = new Parser()
+        const earlier = new Parser(0, true)
         earlier.feedAll(chunk.lines)
         this.parser.prepend(earlier)
         this.windowStart = chunk.lines.length ? chunk.firstLineAt : 0

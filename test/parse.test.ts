@@ -86,6 +86,34 @@ describe('Parser on a real-shaped Claude Code session', () => {
   })
 })
 
+describe('pictures', () => {
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+  const lines = [
+    JSON.stringify({ type: 'assistant', uuid: 'a1', timestamp: '2026-01-10T10:00:00Z', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_shot', name: 'Read', input: { file_path: '/p/.pitcrew/qa/home.png' } }], stop_reason: 'tool_use' } }),
+    JSON.stringify({ type: 'user', uuid: 'u1', timestamp: '2026-01-10T10:00:01Z', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_shot', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: png } }] }] } }),
+    JSON.stringify({ type: 'user', uuid: 'u2', timestamp: '2026-01-10T10:00:02Z', message: { role: 'user', content: [{ type: 'text', text: 'Look at this' }, { type: 'image', source: { type: 'base64', media_type: 'image/svg+xml', data: 'PHN2Zz4=' } }, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: png } }] } }),
+  ]
+
+  it('keeps the screenshots an opened session read, and the images you sent', () => {
+    const p = new Parser(0, true)
+    p.feedAll(lines)
+    expect(p.steps.map((s) => [s.kind, s.images])).toEqual([
+      ['read', 1],
+      ['you', 1],
+    ])
+    expect(p.pictures.get('toolu_shot')).toEqual([{ type: 'image/png', data: png }])
+    // an SVG could carry script, so only plain image types are kept
+    expect(p.pictures.get('u2')).toEqual([{ type: 'image/jpeg', data: png }])
+  })
+
+  it('keeps none while listing sessions, but still counts them', () => {
+    const p = new Parser()
+    p.feedAll(lines)
+    expect(p.steps[0]!.images).toBe(1)
+    expect(p.pictures.size).toBe(0)
+  })
+})
+
 describe('describeTool', () => {
   it('names common tools in plain words', () => {
     const cwd = '/Users/sam/code/shop'

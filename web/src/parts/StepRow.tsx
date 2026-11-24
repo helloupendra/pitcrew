@@ -1,8 +1,11 @@
+import { useState } from 'react'
 import type { DiffLine, Step } from '../../../src/core/types'
+import { withKey } from '../api'
 import { clockParts } from '../format'
 import { Changes, Plan } from './ui'
 
 interface Props {
+  sessionId: string
   step: Step
   open: boolean
   onToggle: () => void
@@ -11,7 +14,7 @@ interface Props {
 }
 
 /** Messages are shown in full; everything else is one line that opens to show the detail. */
-export function StepRow({ step, open, onToggle, asking }: Props) {
+export function StepRow({ sessionId, step, open, onToggle, asking }: Props) {
   if (step.kind === 'you' || step.kind === 'agent') {
     return (
       <li className={`step msg msg-${step.kind}`} id={`step-${step.n}`}>
@@ -19,6 +22,7 @@ export function StepRow({ step, open, onToggle, asking }: Props) {
         <div className="body">
           <span className="who">{step.kind === 'you' ? 'You' : 'Agent'}</span>
           <p className="text">{step.text ?? step.title}</p>
+          {step.images ? <Pictures sessionId={sessionId} step={step} /> : null}
         </div>
       </li>
     )
@@ -52,9 +56,25 @@ export function StepRow({ step, open, onToggle, asking }: Props) {
             {head}
           </div>
         )}
+        {step.images ? <Pictures sessionId={sessionId} step={step} /> : null}
         {open && detail && <Detail step={step} />}
       </div>
     </li>
+  )
+}
+
+/** Screenshots the agent read, or images you sent: small, and large on a click. */
+function Pictures({ sessionId, step }: { sessionId: string; step: Step }) {
+  const [big, setBig] = useState<number>()
+  const src = (k: number) => withKey(`/api/sessions/${sessionId}/images/${encodeURIComponent(step.id)}/${k}`)
+  return (
+    <div className="pictures">
+      {Array.from({ length: step.images ?? 0 }, (_, k) => (
+        <button key={k} type="button" className={big === k ? 'picture is-big' : 'picture'} onClick={() => setBig(big === k ? undefined : k)} aria-label={big === k ? 'Make smaller' : 'Make larger'}>
+          <img src={src(k)} alt={`Picture ${k + 1} of ${step.title}`} loading="lazy" />
+        </button>
+      ))}
+    </div>
   )
 }
 
