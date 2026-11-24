@@ -129,6 +129,8 @@ export interface TalkInfo {
   state?: RunState
   error?: string
   canReply: boolean
+  /** It cannot be continued in place, but a copy of it can (`--fork-session`). */
+  canCopy: boolean
   /** Why you cannot reply, when you cannot. */
   why?: string
 }

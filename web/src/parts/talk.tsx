@@ -37,13 +37,14 @@ interface ComposerProps {
   placeholder: string
   disabled?: boolean
   note?: string
+  sendLabel?: string
   busyLabel?: string
   onSend: (text: string) => Promise<void>
   extra?: React.ReactNode
 }
 
 /** A message box: Enter sends, Shift+Enter makes a new line. */
-export function Composer({ placeholder, disabled, note, busyLabel = 'Sending…', onSend, extra }: ComposerProps) {
+export function Composer({ placeholder, disabled, note, sendLabel = 'Send', busyLabel = 'Sending…', onSend, extra }: ComposerProps) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string>()
@@ -88,7 +89,7 @@ export function Composer({ placeholder, disabled, note, busyLabel = 'Sending…'
         <span className="composer-actions">
           {extra}
           <button type="button" className="btn btn-primary" disabled={disabled || sending || !text.trim()} onClick={() => void send()}>
-            {sending ? busyLabel : 'Send'}
+            {sending ? busyLabel : sendLabel}
           </button>
         </span>
       </div>
@@ -111,13 +112,30 @@ export function SessionTalk({ id, talk, onSent }: { id: string; talk?: TalkInfo;
       onSent()
     }
   }
+  // Held by another window: this page cannot reach that window, but it can continue in a copy.
+  if (!talk.canReply && talk.canCopy) {
+    return (
+      <Composer
+        placeholder="Message a copy of this session…"
+        note={talk.why}
+        sendLabel="Send in a copy"
+        busyLabel="Starting the copy…"
+        onSend={async (text) => {
+          const r = await post<{ sessionId: string; error?: string }>(`/api/sessions/${id}/copy`, { text })
+          if (r.error) throw new Error(r.error)
+          location.hash = `#/s/${r.sessionId}`
+        }}
+      />
+    )
+  }
+
   const note = !talk.canReply
     ? talk.why
     : talk.error
       ? `Claude Code said: ${talk.error}`
       : talk.here
         ? undefined
-        : 'Sending continues this session here, with your own Claude Code.'
+        : 'Not open anywhere else: sending continues this session here, with your own Claude Code.'
 
   return (
     <Composer

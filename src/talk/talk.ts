@@ -63,12 +63,13 @@ export class Talk {
 
   /**
    * Sends a message to a session. If Pitcrew already runs it, the message goes
-   * straight in; otherwise Claude Code starts, either as a new session with
-   * this id or resuming the existing one.
+   * straight in; otherwise Claude Code starts: a new session with this id, the
+   * existing session resumed, or a copy of session `from` under this new id
+   * (the original is left as it is).
    */
-  send(sessionId: string, cwd: string, text: string, mode: 'new' | 'resume'): void {
+  send(sessionId: string, cwd: string, text: string, mode: 'new' | 'resume' | 'copy', from?: string): void {
     let run = this.runs.get(sessionId)
-    if (!run || run.state === 'ended') run = this.start(sessionId, cwd, mode)
+    if (!run || run.state === 'ended') run = this.start(sessionId, cwd, mode, from)
     clearTimeout(run.idleTimer)
     run.state = run.state === 'starting' ? 'starting' : 'working'
     run.child.stdin?.write(JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }) + '\n')
@@ -85,6 +86,11 @@ export class Talk {
       if (run.state !== 'ended') run.child.kill('SIGTERM')
     }, STOP_GRACE_MS).unref()
     return true
+  }
+
+  /** Process ids of the Claude Code runs Pitcrew started, so they are never taken for another window. */
+  ownPids(): Set<number> {
+    return new Set([...this.runs.values()].map((r) => r.child.pid).filter((p): p is number => p !== undefined))
   }
 
   run(sessionId: string): RunInfo | undefined {
@@ -153,7 +159,7 @@ export class Talk {
     }
   }
 
-  private start(sessionId: string, cwd: string, mode: 'new' | 'resume'): Run {
+  private start(sessionId: string, cwd: string, mode: 'new' | 'resume' | 'copy', from?: string): Run {
     const bridge = {
       mcpServers: {
         pitcrew: {
@@ -170,7 +176,11 @@ export class Talk {
       '--output-format',
       'stream-json',
       '--verbose',
-      ...(mode === 'new' ? ['--session-id', sessionId] : ['--resume', sessionId]),
+      ...(mode === 'new'
+        ? ['--session-id', sessionId]
+        : mode === 'copy'
+          ? ['--resume', from ?? '', '--fork-session', '--session-id', sessionId]
+          : ['--resume', sessionId]),
       '--mcp-config',
       JSON.stringify(bridge),
       '--permission-prompt-tool',

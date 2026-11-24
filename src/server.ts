@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net'
 import path from 'node:path'
 import type { SessionDetail, SessionSummary, TalkInfo } from './core/types.js'
 import type { ClaudeCodeSource } from './sources/claude-code/source.js'
+import { findElsewhere, type Elsewhere } from './talk/elsewhere.js'
 import { Talk } from './talk/talk.js'
 
 export interface ServerOptions {
@@ -15,6 +16,14 @@ export interface ServerOptions {
   demo: boolean
   /** Talk settings; leave out for a read-only pit wall. */
   talk?: { claude: string; bridge: string }
+  /** How to tell whether a session is open in another Claude Code window (replaceable in tests). */
+  elsewhere?: typeof findElsewhere
+}
+
+const ELSEWHERE_WHY: Record<Exclude<Elsewhere, undefined> | 'busy', string> = {
+  session: 'This session is open in another Claude Code window (VS Code or a terminal). Reply there, or continue in a copy here.',
+  folder: 'A Claude Code window is open in this project and may hold this session. Reply there, or continue in a copy here.',
+  busy: 'This session is busy in another window. Reply there, or continue in a copy here.',
 }
 
 export interface RunningServer {
@@ -73,6 +82,7 @@ class HttpError extends Error {
  */
 export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   const { source } = opts
+  const elsewhere = opts.elsewhere ?? findElsewhere
   const clients = new Set<http.ServerResponse>()
   let port = opts.port
   const bridgeToken = randomBytes(24).toString('base64url')
@@ -140,7 +150,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       const id = parts[1]!
       const s = await source.session(id, intParam(url, 'after'))
       if (!s) return send(res, 404, { error: 'No such session.' })
-      return send(res, 200, { ...s, summary: withTalk(s.summary), talk: talkInfo(id, s), asks: talk?.asksFor(id) ?? [] })
+      return send(res, 200, { ...s, summary: withTalk(s.summary), talk: await talkInfo(id, s), asks: talk?.asksFor(id) ?? [] })
     }
     if (parts[0] === 'sessions' && parts[2] === 'earlier' && parts.length === 3) {
       const before = intParam(url, 'before')
@@ -167,12 +177,27 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       }
       const info = await source.sessionInfo(id)
       if (!info) throw new HttpError(404, 'No such session.')
-      if (info.status === 'working' || info.status === 'waiting') {
-        throw new HttpError(409, 'This session is busy in another window. Reply there, or wait until it finishes.')
-      }
+      const held = await heldElsewhere(id, info.status, info.cwd)
+      if (held) throw new HttpError(409, ELSEWHERE_WHY[held])
       const cwd = await folder(info.cwd)
       talk.send(id, cwd, text, 'resume')
       return send(res, 202, { ok: true })
+    }
+
+    // Continue a session in a copy: a new session with the same history; the original is not touched.
+    if (parts[0] === 'sessions' && parts[2] === 'copy' && parts.length === 3) {
+      const from = sessionId(parts[1])
+      const text = message(body)
+      const info = await source.sessionInfo(from)
+      if (!info) throw new HttpError(404, 'No such session.')
+      const cwd = await folder(info.cwd)
+      const id = randomUUID()
+      talk.send(id, cwd, text, 'copy', from)
+      const ready = await until(async () => {
+        await source.scan()
+        return source.has(id) || talk.run(id)?.state === 'ended'
+      }, NEW_SESSION_WAIT_MS)
+      return send(res, 201, { sessionId: id, ready: ready && source.has(id), error: talk.run(id)?.error })
     }
 
     // Stop a session Pitcrew runs.
@@ -234,18 +259,26 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     return s
   }
 
-  function talkInfo(id: string, s: SessionDetail): TalkInfo {
-    if (!talk) return { enabled: false, here: false, canReply: false, why: 'Pitcrew was started read-only.' }
+  /** Why a session Pitcrew does not run cannot be continued in place, or undefined when it can. */
+  async function heldElsewhere(id: string, status: SessionSummary['status'], cwd: string | undefined): Promise<keyof typeof ELSEWHERE_WHY | undefined> {
+    const where = await elsewhere(id, cwd, talk?.ownPids() ?? new Set())
+    if (where) return where
+    return status === 'working' || status === 'waiting' ? 'busy' : undefined
+  }
+
+  async function talkInfo(id: string, s: SessionDetail): Promise<TalkInfo> {
+    if (!talk) return { enabled: false, here: false, canReply: false, canCopy: false, why: 'Pitcrew was started read-only.' }
     const run = talk.run(id)
     const here = Boolean(run && run.state !== 'ended')
-    const busy = !here && (s.summary.status === 'working' || s.summary.status === 'waiting')
+    const held = here ? undefined : await heldElsewhere(id, s.summary.status, (await source.sessionInfo(id))?.cwd)
     return {
       enabled: true,
       here,
       state: run?.state,
       error: run?.error,
-      canReply: !busy,
-      why: busy ? 'This session is busy in another window. Reply there, or wait until it finishes.' : undefined,
+      canReply: !held,
+      canCopy: true,
+      why: held ? ELSEWHERE_WHY[held] : undefined,
     }
   }
 
