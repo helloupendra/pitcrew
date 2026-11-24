@@ -78,6 +78,22 @@ export interface Project {
   working: number
   waiting: number
   lastAt: string
+  /** Sessions active on each of the last 7 days, oldest first, today last. */
+  activity: number[]
+  /** Files with changes not yet committed, from `git status`; absent when not a git folder or not known. */
+  uncommitted?: number
+}
+
+/** One line of the feed across all projects. */
+export interface ActivityItem {
+  sessionId: string
+  projectId: string
+  project: string
+  session: string
+  kind: StepKind
+  title: string
+  at: string
+  failed?: boolean
 }
 
 export interface FileTouched {
@@ -103,7 +119,8 @@ export interface SessionDetail {
 export interface Overview {
   projects: Project[]
   live: SessionSummary[]
-  counts: { working: number; waiting: number; yourTurn: number }
+  recent: ActivityItem[]
+  counts: { working: number; waiting: number; yourTurn: number; activeProjects: number }
   root: string
   demo: boolean
 }

@@ -1,8 +1,9 @@
 import { readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
+import { uncommittedFiles } from '../../core/git.js'
 import { readLines } from '../../core/lines.js'
-import type { FileTouched, Overview, Project, SessionDetail, SessionStatus, SessionSummary, Step } from '../../core/types.js'
+import type { ActivityItem, FileTouched, Overview, Project, SessionDetail, SessionStatus, SessionSummary, Step, StepKind } from '../../core/types.js'
 import { clip, Parser, type SessionMeta } from './parse.js'
 import { statusOf } from './status.js'
 
@@ -16,6 +17,12 @@ const FIRST_STEPS = 400
 /** Sessions changed within this window are checked every second; the rest every few seconds. */
 const RECENT_MS = 10 * 60_000
 const MAX_OPEN_READERS = 6
+/** Lines in the feed across all projects, and how many each session may add. */
+const FEED_ITEMS = 40
+const FEED_PER_SESSION = 8
+/** Steps worth a line in the feed: reading files and plan updates would drown the rest. */
+const FEED_KINDS = new Set<StepKind>(['you', 'agent', 'edit', 'write', 'run', 'search', 'web', 'helper', 'ask', 'note'])
+const DAY_MS = 86_400_000
 
 const SESSION_FILE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/i
 
@@ -38,6 +45,8 @@ interface Facts {
   title: string
   pending: Step[]
   lastAgentText?: string
+  /** The last few steps, for the feed. */
+  recent: Step[]
 }
 
 interface CachedFacts {
@@ -124,26 +133,62 @@ export class ClaudeCodeSource {
   }
 
   async overview(): Promise<Omit<Overview, 'root' | 'demo'>> {
-    const summaries = await this.allSummaries()
+    const all = await this.allSessions()
+    const summaries = all.map((e) => e.summary)
     const byProject = new Map<string, SessionSummary[]>()
     for (const s of summaries) {
       const list = byProject.get(s.projectId) ?? []
       list.push(s)
       byProject.set(s.projectId, list)
     }
-    const projects: Project[] = [...byProject.entries()].map(([id, list]) => this.projectOf(id, list))
+    const projects = await Promise.all([...byProject.entries()].map(([id, list]) => this.projectWithGit(id, list)))
     projects.sort((a, b) => b.lastAt.localeCompare(a.lastAt))
+    const names = new Map(projects.map((p) => [p.id, p.name]))
+
+    const recent: ActivityItem[] = all
+      .flatMap(({ info, facts }) =>
+        facts.recent.map((s) => ({
+          sessionId: info.id,
+          projectId: info.projectId,
+          project: names.get(info.projectId) ?? '',
+          session: facts.title,
+          kind: s.kind,
+          title: s.title,
+          at: s.at,
+          failed: s.failed,
+        })),
+      )
+      .filter((a) => a.at)
+      .sort((a, b) => b.at.localeCompare(a.at))
+      .slice(0, FEED_ITEMS)
 
     const live = summaries.filter((s) => s.status !== 'idle').sort(byUrgency)
     const count = (st: SessionStatus) => summaries.filter((s) => s.status === st).length
-    return { projects, live, counts: { working: count('working'), waiting: count('waiting'), yourTurn: count('your-turn') } }
+    const weekAgo = new Date(this.clock() - 7 * DAY_MS).toISOString()
+    return {
+      projects,
+      live,
+      recent,
+      counts: {
+        working: count('working'),
+        waiting: count('waiting'),
+        yourTurn: count('your-turn'),
+        activeProjects: projects.filter((p) => p.lastAt >= weekAgo).length,
+      },
+    }
   }
 
   async project(id: string): Promise<{ project: Project; sessions: SessionSummary[] } | undefined> {
-    const sessions = (await this.allSummaries()).filter((s) => s.projectId === id)
+    const sessions = (await this.allSessions()).map((e) => e.summary).filter((s) => s.projectId === id)
     if (!sessions.length) return undefined
     sessions.sort((a, b) => b.lastAt.localeCompare(a.lastAt))
-    return { project: this.projectOf(id, sessions), sessions }
+    return { project: await this.projectWithGit(id, sessions), sessions }
+  }
+
+  private async projectWithGit(id: string, sessions: SessionSummary[]): Promise<Project> {
+    const p = this.projectOf(id, sessions)
+    const uncommitted = await uncommittedFiles(p.path, this.clock())
+    return uncommitted === undefined ? p : { ...p, uncommitted }
   }
 
   /**
@@ -165,7 +210,7 @@ export class ClaudeCodeSource {
     const title = facts?.title ?? titleOf(meta)
     const project = this.projectOf(info.projectId, [])
     return {
-      summary: this.summaryOf(info, { meta, title, pending: reader.parser.pending, lastAgentText: lastAgentText(all) }),
+      summary: this.summaryOf(info, { meta, title, pending: reader.parser.pending, lastAgentText: lastAgentText(all), recent: [] }),
       project: { id: project.id, name: project.name, path: project.path },
       steps,
       hasEarlier: reader.windowStart > 0 || (all[0] !== undefined && all[0].n < firstShown),
@@ -202,11 +247,11 @@ export class ClaudeCodeSource {
     return r
   }
 
-  private async allSummaries(): Promise<SessionSummary[]> {
-    const out: SessionSummary[] = []
+  private async allSessions(): Promise<{ info: SessionFile; facts: Facts; summary: SessionSummary }[]> {
+    const out: { info: SessionFile; facts: Facts; summary: SessionSummary }[] = []
     for (const info of this.files.values()) {
       const facts = await this.factsOf(info)
-      if (facts) out.push(this.summaryOf(info, facts))
+      if (facts) out.push({ info, facts, summary: this.summaryOf(info, facts) })
     }
     return out
   }
@@ -254,6 +299,7 @@ export class ClaudeCodeSource {
       working: sessions.filter((s) => s.status === 'working').length,
       waiting: sessions.filter((s) => s.status === 'waiting').length,
       lastAt: newest?.lastAt ?? '',
+      activity: activityByDay(sessions, this.clock()),
     }
   }
 
@@ -288,7 +334,31 @@ async function readFacts(info: SessionFile): Promise<Facts | null> {
     cwd: tail.meta.cwd ?? head.meta.cwd,
   }
   if (!head.steps.length && !tail.steps.length && !meta.customTitle && !meta.aiTitle) return null
-  return { meta, title: titleOf(meta), pending: tail.pending, lastAgentText: lastAgentText(tail.steps) }
+  const recent = tail.steps.filter((s) => FEED_KINDS.has(s.kind)).slice(-FEED_PER_SESSION)
+  return { meta, title: titleOf(meta), pending: tail.pending, lastAgentText: lastAgentText(tail.steps), recent }
+}
+
+/**
+ * How many sessions were active on each of the last 7 days (local time), today last.
+ * A session counts on every day between its first and its last write.
+ */
+export function activityByDay(sessions: Pick<SessionSummary, 'startedAt' | 'lastAt'>[], now: number): number[] {
+  const today = new Date(now)
+  today.setHours(0, 0, 0, 0)
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const start = new Date(today)
+    start.setDate(today.getDate() - (6 - i))
+    const end = new Date(start)
+    end.setDate(start.getDate() + 1)
+    return { start: start.getTime(), end: end.getTime() }
+  })
+  return days.map(({ start, end }) =>
+    sessions.filter((s) => {
+      const last = Date.parse(s.lastAt)
+      const first = s.startedAt ? Date.parse(s.startedAt) : last
+      return first < end && last >= start
+    }).length,
+  )
 }
 
 function titleOf(meta: SessionMeta): string {

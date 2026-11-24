@@ -67,7 +67,13 @@ describe('ClaudeCodeSource', () => {
       ['Working one', 'working'],
       ['Finished one', 'your-turn'],
     ])
-    expect(o.counts).toEqual({ working: 1, waiting: 1, yourTurn: 1 })
+    expect(o.counts).toEqual({ working: 1, waiting: 1, yourTurn: 1, activeProjects: 2 })
+    // the newest steps of every session, newest first
+    expect(o.recent[0]).toMatchObject({ project: 'shop', session: 'Working one', kind: 'run', title: 'Build' })
+    expect(o.recent.map((r) => r.at)).toEqual([...o.recent.map((r) => r.at)].sort().reverse())
+    // one session a day for the shop project's three sessions, all today (NOW); folders that are not git repos have no count
+    expect(o.projects[0]!.activity).toEqual([0, 0, 0, 0, 0, 0, 3])
+    expect(o.projects[0]!.uncommitted).toBeUndefined()
     expect(o.live[0]!.now).toContain('Waiting on: Deploy')
   })
 
