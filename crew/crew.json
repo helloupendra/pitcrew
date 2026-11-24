@@ -1,0 +1,8 @@
+[
+  { "id": "qa-tester", "title": "QA tester", "short": "Runs the project, goes through the main flows and edge cases, reports what broke with screenshots.", "task": "Test this project the way a careful person would and report what is broken.", "command": "qa" },
+  { "id": "code-reviewer", "title": "Code reviewer", "short": "Reviews the current changes like a senior engineer: bugs, risks and missing tests, with file and line.", "task": "Review the current changes and report what could go wrong.", "command": "review" },
+  { "id": "security-auditor", "title": "Security auditor", "short": "Looks for leaked secrets, injection, missing auth and vulnerable dependencies, each with a fix.", "task": "Audit this project for security problems.", "command": "security" },
+  { "id": "test-writer", "title": "Test writer", "short": "Finds important code with no tests and writes focused tests in the project's own framework.", "task": "Write tests for the most important code that has none, and run them.", "command": "tests" },
+  { "id": "docs-writer", "title": "Docs writer", "short": "Brings the README and docs in line with what the code really does.", "task": "Bring the README and docs in line with what the code does.", "command": "docs" },
+  { "id": "dependency-doctor", "title": "Dependency doctor", "short": "Checks outdated and vulnerable dependencies and proposes a safe upgrade order.", "task": "Check the dependencies and propose a safe upgrade plan.", "command": "deps" }
+]

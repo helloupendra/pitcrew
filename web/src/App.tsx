@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AuthError, connect } from './api'
 import { Message } from './parts/ui'
+import { CrewPage } from './views/CrewPage'
 import { Home } from './views/Home'
 import { ProjectPage } from './views/ProjectPage'
 import { SessionPage } from './views/SessionPage'
 
-type Route = { page: 'home' } | { page: 'project'; id: string } | { page: 'session'; id: string }
+type Route = { page: 'home' } | { page: 'crew' } | { page: 'project'; id: string } | { page: 'session'; id: string }
 
 function readRoute(): Route {
+  if (location.hash === '#/crew') return { page: 'crew' }
   const [, kind, id] = /^#\/(p|s)\/(.+)$/.exec(location.hash) ?? []
   if (kind === 'p' && id) return { page: 'project', id: decodeURIComponent(id) }
   if (kind === 's' && id) return { page: 'session', id }
@@ -74,6 +76,7 @@ export function App() {
     )
   } else if (route.page === 'project') body = <ProjectPage id={route.id} onError={onError} />
   else if (route.page === 'session') body = <SessionPage id={route.id} onError={onError} />
+  else if (route.page === 'crew') body = <CrewPage onError={onError} />
   else body = <Home onError={onError} />
 
   return (
@@ -83,6 +86,14 @@ export function App() {
           Pitcrew
         </a>
         <span className={`conn ${connected ? 'on' : 'off'}`}>{connected ? 'Live' : 'Reconnecting…'}</span>
+        <nav className="nav">
+          <a href="#/" aria-current={route.page === 'home' ? 'page' : undefined}>
+            Pit wall
+          </a>
+          <a href="#/crew" aria-current={route.page === 'crew' ? 'page' : undefined}>
+            Crew
+          </a>
+        </nav>
         <span className="spacer" />
         <button type="button" className="theme" onClick={() => setTheme(NEXT_THEME[theme])} title="Switch theme">
           {theme === 'system' ? 'Auto' : theme === 'light' ? 'Light' : 'Dark'}

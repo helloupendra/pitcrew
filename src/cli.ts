@@ -4,6 +4,8 @@ import { randomBytes } from 'node:crypto'
 import { accessSync, constants, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { homedir } from 'node:os'
+import { installCrew, loadCrew } from './crew/crew.js'
 import { startDemo, type Demo } from './demo/demo.js'
 import { startServer } from './server.js'
 import { ClaudeCodeSource, defaultRoot } from './sources/claude-code/source.js'
@@ -11,8 +13,12 @@ import { ClaudeCodeSource, defaultRoot } from './sources/claude-code/source.js'
 const HELP = `pitcrew: a local pit wall for your coding agents
 
 Usage
-  npx pitcrew            watch your Claude Code sessions
-  npx pitcrew --demo     try it with made-up sessions
+  npx pitcrew                      watch your Claude Code sessions
+  npx pitcrew --demo               try it with made-up sessions
+  npx pitcrew crew install         add the crew to Claude Code (~/.claude):
+                                   /qa /review /security /tests /docs /deps
+  npx pitcrew crew install --project <dir>   …to one project only
+  npx pitcrew crew list            show the crew
 
 Options
   --demo          use made-up sessions (nothing of yours is read)
@@ -105,7 +111,27 @@ function openBrowser(url: string): void {
   }
 }
 
+async function crewCommand(argv: string[]): Promise<void> {
+  const [sub, ...rest] = argv
+  if (sub === 'list') {
+    for (const a of await loadCrew()) console.log(`  /${a.command.padEnd(9)} ${a.title.padEnd(18)} ${a.short}`)
+    return
+  }
+  if (sub !== 'install') fail('use: pitcrew crew install [--project <dir>] [--force], or pitcrew crew list')
+  let target = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), '.claude'))
+  let force = false
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === '--project') target = path.join(path.resolve(rest[++i] ?? fail('--project needs a folder')), '.claude')
+    else if (rest[i] === '--force') force = true
+    else fail(`unknown option ${rest[i]}`)
+  }
+  const { written, kept } = await installCrew(target, force)
+  console.log(`\n  The crew is in ${target}: ${written.length} file(s) written${kept.length ? `, ${kept.length} kept (already there; --force replaces them)` : ''}.`)
+  console.log('  In Claude Code: /qa /review /security /tests /docs /deps, or "use the qa-tester agent".\n')
+}
+
 async function main(): Promise<void> {
+  if (process.argv[2] === 'crew') return crewCommand(process.argv.slice(3))
   const args = parseArgs(process.argv.slice(2))
   let demo: Demo | undefined
   if (args.demo) demo = await startDemo()

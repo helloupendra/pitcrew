@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net'
 import path from 'node:path'
 import type { SessionDetail, SessionSummary, TalkInfo } from './core/types.js'
 import type { ClaudeCodeSource } from './sources/claude-code/source.js'
+import { agentsFlag, loadCrew, makeAgent, ownAgents, runPrompt } from './crew/crew.js'
 import { findElsewhere, type Elsewhere } from './talk/elsewhere.js'
 import { Talk } from './talk/talk.js'
 
@@ -159,6 +160,9 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       return s ? send(res, 200, s) : send(res, 404, { error: 'No such session.' })
     }
     if (parts[0] === 'events' && parts.length === 1) return openStream(res)
+    if (parts[0] === 'crew' && parts.length === 1) {
+      return send(res, 200, { crew: await loadCrew(), own: await ownAgents(), talk: Boolean(talk) })
+    }
     return send(res, 404, { error: 'Not found.' })
   }
 
@@ -218,6 +222,37 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
         return source.has(id) || talk.run(id)?.state === 'ended'
       }, NEW_SESSION_WAIT_MS)
       return send(res, 201, { sessionId: id, ready: started && source.has(id), error: talk.run(id)?.error })
+    }
+
+    // Run a crew member (or an agent of your own) on a project: a new session with one task.
+    if (parts[0] === 'crew' && parts[1] === 'run' && parts.length === 2) {
+      const agentId = typeof body.agent === 'string' ? body.agent : ''
+      const project = (await source.project(typeof body.projectId === 'string' ? body.projectId : ''))?.project
+      if (!project) throw new HttpError(404, 'No such project.')
+      const crewAgent = (await loadCrew()).find((a) => a.id === agentId)
+      const own = crewAgent ? undefined : (await ownAgents()).find((a) => a.id === agentId)
+      if (!crewAgent && !own) throw new HttpError(404, 'No such agent.')
+      const task = typeof body.task === 'string' && body.task.trim() ? message({ text: body.task }) : crewAgent?.task ?? 'Do your job on this project.'
+      const cwd = await folder(project.path)
+      const id = randomUUID()
+      talk.send(id, cwd, runPrompt(agentId, task), 'new', undefined, crewAgent ? ['--agents', agentsFlag(crewAgent)] : [])
+      const ready = await until(async () => {
+        await source.scan()
+        return source.has(id) || talk.run(id)?.state === 'ended'
+      }, NEW_SESSION_WAIT_MS)
+      return send(res, 201, { sessionId: id, ready: ready && source.has(id), error: talk.run(id)?.error })
+    }
+
+    // Make an agent of your own (~/.claude/agents/<name>.md; never overwrites).
+    if (parts[0] === 'crew' && parts[1] === 'agents' && parts.length === 2) {
+      const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string) : '')
+      const tools = Array.isArray(body.tools) ? body.tools.filter((t): t is string => typeof t === 'string') : []
+      try {
+        const file = await makeAgent({ name: str('name'), description: str('description'), prompt: str('prompt'), tools })
+        return send(res, 201, { file })
+      } catch (e) {
+        throw new HttpError(400, e instanceof Error ? e.message : String(e))
+      }
     }
 
     // Allow or deny what an agent asked for.

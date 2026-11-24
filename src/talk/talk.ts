@@ -67,9 +67,9 @@ export class Talk {
    * existing session resumed, or a copy of session `from` under this new id
    * (the original is left as it is).
    */
-  send(sessionId: string, cwd: string, text: string, mode: 'new' | 'resume' | 'copy', from?: string): void {
+  send(sessionId: string, cwd: string, text: string, mode: 'new' | 'resume' | 'copy', from?: string, extraArgs: string[] = []): void {
     let run = this.runs.get(sessionId)
-    if (!run || run.state === 'ended') run = this.start(sessionId, cwd, mode, from)
+    if (!run || run.state === 'ended') run = this.start(sessionId, cwd, mode, from, extraArgs)
     clearTimeout(run.idleTimer)
     run.state = run.state === 'starting' ? 'starting' : 'working'
     run.child.stdin?.write(JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }) + '\n')
@@ -159,7 +159,7 @@ export class Talk {
     }
   }
 
-  private start(sessionId: string, cwd: string, mode: 'new' | 'resume' | 'copy', from?: string): Run {
+  private start(sessionId: string, cwd: string, mode: 'new' | 'resume' | 'copy', from: string | undefined, extraArgs: string[]): Run {
     const bridge = {
       mcpServers: {
         pitcrew: {
@@ -185,6 +185,7 @@ export class Talk {
       JSON.stringify(bridge),
       '--permission-prompt-tool',
       'mcp__pitcrew__approve',
+      ...extraArgs,
     ]
     const child = spawn(this.opts.claude, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
     const run: Run = { child, state: 'starting', startedAt: new Date().toISOString(), stderr: '', sawResult: false }
