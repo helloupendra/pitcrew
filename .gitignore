@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.local/
+
+# Planning and mockups stay private (kept in the private project repo, not here)
+PLAN.md
+template/
