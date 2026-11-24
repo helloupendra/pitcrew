@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Project, SessionSummary } from '../../../src/core/types'
 import { get, serialLoader, useChanges } from '../api'
-import { ago, tilde } from '../format'
-import { Changes, Status, useNow } from '../parts/ui'
+import { ago, plural, tilde } from '../format'
+import { Activity, Changes, Status, useNow } from '../parts/ui'
 
 const REFRESH_MS = 10_000
 
@@ -32,9 +32,13 @@ export function ProjectPage({ id, onError }: { id: string; onError: (e: unknown)
           ← All projects
         </a>
         <h1>{project.name}</h1>
-        <p className="muted mono small">
-          {tilde(project.path)}
+        <p className="muted small">
+          <span className="mono">{tilde(project.path)}</span>
           {project.branch ? ` · ${project.branch}` : ''}
+          {project.uncommitted === undefined ? '' : ` · ${project.uncommitted ? plural(project.uncommitted, 'uncommitted file') : 'nothing uncommitted'}`}
+        </p>
+        <p className="head-activity muted small">
+          <Activity days={project.activity} now={now} /> {plural(sessions.length, 'session')}
         </p>
       </header>
 

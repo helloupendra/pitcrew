@@ -48,6 +48,41 @@ export function Changes({ added, removed }: { added?: number; removed?: number }
   )
 }
 
+/** "3 of 5" with a thin bar: how far through its own plan the agent is. */
+export function PlanProgress({ items }: { items: PlanItem[] }) {
+  const done = items.filter((p) => p.status === 'completed').length
+  return (
+    <span className="progress" title={items.find((p) => p.status === 'in_progress')?.text}>
+      <span className="progress-bar" aria-hidden="true">
+        <span style={{ width: `${(done / items.length) * 100}%` }} />
+      </span>
+      <span className="small muted">
+        {done} of {items.length}
+      </span>
+    </span>
+  )
+}
+
+/** Seven small bars: sessions active on each of the last seven days, today last. */
+export function Activity({ days, now }: { days: number[]; now: number }) {
+  const max = Math.max(1, ...days)
+  const label = (i: number) => {
+    const d = new Date(now)
+    d.setDate(d.getDate() - (days.length - 1 - i))
+    const day = i === days.length - 1 ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
+    return `${day}: ${days[i]} ${days[i] === 1 ? 'session' : 'sessions'}`
+  }
+  return (
+    <span className="activity" role="img" aria-label={`Sessions per day, last 7 days: ${days.join(', ')}`}>
+      {days.map((n, i) => (
+        <span key={i} className={`activity-day${i === days.length - 1 ? ' today' : ''}`} title={label(i)}>
+          <span style={{ height: n ? `${Math.max(18, (n / max) * 100)}%` : '0' }} />
+        </span>
+      ))}
+    </span>
+  )
+}
+
 export function Message({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
     <div className="message">

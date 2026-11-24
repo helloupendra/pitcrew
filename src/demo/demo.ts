@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { appendFile, mkdir, mkdtemp, rm, unlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { describeTool } from '../sources/claude-code/parse.js'
 import { finished, live, type DemoEvent, type DemoSession } from './script.js'
 
 const VERSION = '2.1.0'
@@ -24,6 +25,8 @@ export class SessionWriter {
   readonly id = randomUUID()
   private parent: string | null = null
   private toolNo = 0
+  private added = 0
+  private removed = 0
 
   constructor(private readonly s: DemoSession) {}
 
@@ -38,6 +41,13 @@ export class SessionWriter {
       at(),
       toolUseResult(e),
     )
+    // Claude Code keeps running totals of lines changed in a cost-state line.
+    const change = describeTool(e.tool, e.input)
+    if (!e.error && (change.added || change.removed)) {
+      this.added += change.added ?? 0
+      this.removed += change.removed ?? 0
+      return [[call], [result, { type: 'cost-state', sessionId: this.id, totalCostUSD: 0, totalLinesAdded: this.added, totalLinesRemoved: this.removed }]]
+    }
     return [[call], [result]]
   }
 
