@@ -19,6 +19,7 @@ describe('talk', () => {
   let server: RunningServer
   let readOnly: RunningServer
   let busyId = ''
+  let heldId = ''
   let projectId = ''
 
   beforeAll(async () => {
@@ -33,6 +34,9 @@ describe('talk', () => {
     const w = new SessionWriter({ cwd: project, branch: 'main', title: 'Earlier work', events: [{ you: 'hi' }, { say: 'Hello.', final: true }] })
     const busy = new SessionWriter({ cwd: project, branch: 'main', title: 'Busy', events: [] })
     busyId = busy.id
+    // Finished its turn, but still open in an editor window (found by the process check).
+    const held = new SessionWriter({ cwd: project, branch: 'main', title: 'Open in VS Code', events: [] })
+    heldId = held.id
     projectId = folderFor(project)
     const dir = path.join(root, projectId)
     mkdirSync(dir, { recursive: true })
@@ -41,8 +45,17 @@ describe('talk', () => {
       events.flatMap((e) => wr.lines(e, at).flat()).map((l) => JSON.stringify(l) + '\n').join('')
     writeFileSync(path.join(dir, `${w.id}.jsonl`), lines(w, [{ you: 'hi' }, { say: 'Hello.', final: true }], () => old))
     writeFileSync(path.join(dir, `${busy.id}.jsonl`), lines(busy, [{ you: 'go' }, { tool: 'Bash', input: { command: 'sleep 9', description: 'Wait' }, pending: true }], () => new Date()))
+    writeFileSync(path.join(dir, `${held.id}.jsonl`), lines(held, [{ you: 'hi' }, { say: 'Done.', final: true }], () => old))
 
-    server = await startServer({ source: new ClaudeCodeSource(root), port: 0, token, webDir: web, demo: false, talk: { claude: fake, bridge } })
+    server = await startServer({
+      source: new ClaudeCodeSource(root),
+      port: 0,
+      token,
+      webDir: web,
+      demo: false,
+      talk: { claude: fake, bridge },
+      elsewhere: async (id) => (id === heldId ? 'session' : undefined),
+    })
     readOnly = await startServer({ source: new ClaudeCodeSource(root), port: 0, token, webDir: web, demo: false })
   })
   afterAll(async () => {
@@ -120,6 +133,27 @@ describe('talk', () => {
     expect(res.status).toBe(409)
     const d = await get<SessionDetail>(`api/sessions/${busyId}`)
     expect(d.talk).toMatchObject({ here: false, canReply: false })
+  })
+
+  it('never continues a session held by another window in place, but offers a copy', async () => {
+    const d = await get<SessionDetail>(`api/sessions/${heldId}`)
+    expect(d.summary.status).toBe('your-turn')
+    expect(d.talk).toMatchObject({ here: false, canReply: false, canCopy: true })
+    expect(d.talk?.why).toContain('open in another Claude Code window')
+    expect((await post(server, `api/sessions/${heldId}/messages`, { text: 'hello?' })).status).toBe(409)
+
+    const res = await post(server, `api/sessions/${heldId}/copy`, { text: 'carry on here' })
+    expect(res.status).toBe(201)
+    const { sessionId, ready } = (await res.json()) as { sessionId: string; ready: boolean }
+    expect(ready).toBe(true)
+    expect(sessionId).not.toBe(heldId)
+    const copy = await until(
+      () => get<SessionDetail>(`api/sessions/${sessionId}`),
+      (s) => s.steps?.some((x) => x.kind === 'agent'),
+    )
+    expect(copy.steps.map((s) => s.title)).toEqual(['carry on here', 'ok'])
+    // the original is untouched
+    expect((await get<SessionDetail>(`api/sessions/${heldId}`)).steps.map((s) => s.title)).toEqual(['hi', 'Done.'])
   })
 
   it('needs the token in the header and a JSON body for anything that changes something', async () => {
