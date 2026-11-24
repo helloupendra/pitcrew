@@ -16,6 +16,7 @@
   },
   "files": [
     "dist",
+    "crew",
     "README.md",
     "LICENSE"
   ],

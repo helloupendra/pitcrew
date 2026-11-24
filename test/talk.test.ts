@@ -156,6 +156,18 @@ describe('talk', () => {
     expect((await get<SessionDetail>(`api/sessions/${heldId}`)).steps.map((s) => s.title)).toEqual(['hi', 'Done.'])
   })
 
+  it('runs a crew member on a project as a new session', async () => {
+    const res = await post(server, 'api/crew/run', { agent: 'code-reviewer', projectId })
+    expect(res.status).toBe(201)
+    const { sessionId } = (await res.json()) as { sessionId: string }
+    const d = await until(
+      () => get<SessionDetail>(`api/sessions/${sessionId}`),
+      (s) => s.steps?.some((x) => x.kind === 'agent'),
+    )
+    expect(d.steps[0]!.title).toBe('Use the code-reviewer agent for this: Review the current changes and report what could go wrong.')
+    expect((await post(server, 'api/crew/run', { agent: 'nobody', projectId })).status).toBe(404)
+  })
+
   it('needs the token in the header and a JSON body for anything that changes something', async () => {
     const viaQuery = await fetch(`${server.url}api/talk/new?t=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
     expect(viaQuery.status).toBe(401)

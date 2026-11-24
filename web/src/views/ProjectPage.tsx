@@ -3,13 +3,33 @@ import type { Project, SessionSummary } from '../../../src/core/types'
 import { get, post, serialLoader, useChanges } from '../api'
 import { ago, plural, tilde } from '../format'
 import { Composer } from '../parts/talk'
+import { runAgent } from './CrewPage'
 import { Activity, Changes, Status, useNow } from '../parts/ui'
 
 const REFRESH_MS = 10_000
+/** One click runs a crew member on this project with its usual task. */
+const QUICK: [string, string][] = [
+  ['qa-tester', 'QA'],
+  ['code-reviewer', 'Review'],
+  ['security-auditor', 'Security'],
+  ['test-writer', 'Tests'],
+]
 
 export function ProjectPage({ id, onError }: { id: string; onError: (e: unknown) => void }) {
   const [data, setData] = useState<{ project: Project; sessions: SessionSummary[]; talk?: boolean }>()
   const [composing, setComposing] = useState(false)
+  const [starting, setStarting] = useState<string>()
+  const [quickError, setQuickError] = useState<string>()
+  const quick = async (agent: string) => {
+    setStarting(agent)
+    setQuickError(undefined)
+    try {
+      await runAgent(agent, id)
+    } catch (e) {
+      setQuickError(e instanceof Error ? e.message : String(e))
+      setStarting(undefined)
+    }
+  }
   const now = useNow()
 
   const load = useMemo(
@@ -43,10 +63,19 @@ export function ProjectPage({ id, onError }: { id: string; onError: (e: unknown)
           <Activity days={project.activity} now={now} /> {plural(sessions.length, 'session')}
         </p>
         {data.talk && !composing && (
-          <button type="button" className="btn btn-primary new-session" onClick={() => setComposing(true)}>
-            New session
-          </button>
+          <div className="project-actions">
+            <button type="button" className="btn btn-primary" onClick={() => setComposing(true)}>
+              New session
+            </button>
+            <span className="muted small">Run the crew:</span>
+            {QUICK.map(([agent, label]) => (
+              <button key={agent} type="button" className="btn" disabled={starting !== undefined} onClick={() => void quick(agent)}>
+                {starting === agent ? 'Starting…' : label}
+              </button>
+            ))}
+          </div>
         )}
+        {quickError && <p className="minus small">{quickError}</p>}
       </header>
 
       {composing && (
