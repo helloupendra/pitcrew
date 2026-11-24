@@ -27,6 +27,7 @@ export class SessionWriter {
   private toolNo = 0
   private added = 0
   private removed = 0
+  private cost = 0
 
   constructor(private readonly s: DemoSession) {}
 
@@ -46,7 +47,19 @@ export class SessionWriter {
     if (!e.error && (change.added || change.removed)) {
       this.added += change.added ?? 0
       this.removed += change.removed ?? 0
-      return [[call], [result, { type: 'cost-state', sessionId: this.id, totalCostUSD: 0, totalLinesAdded: this.added, totalLinesRemoved: this.removed }]]
+      // Made-up but plausible numbers, so the demo shows a cost too.
+      this.cost += 0.04 + (change.added ?? 0) * 0.002
+      const usage = {
+        'claude-sonnet-5-5': {
+          inputTokens: Math.round(this.cost * 9_000),
+          outputTokens: Math.round(this.cost * 2_000),
+          cacheReadInputTokens: Math.round(this.cost * 120_000),
+          cacheCreationInputTokens: 0,
+          costUSD: this.cost,
+        },
+      }
+      const totals = { totalCostUSD: Number(this.cost.toFixed(4)), modelUsage: usage, totalLinesAdded: this.added, totalLinesRemoved: this.removed }
+      return [[call], [result, { type: 'cost-state', sessionId: this.id, ...totals }]]
     }
     return [[call], [result]]
   }
