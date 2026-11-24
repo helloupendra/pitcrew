@@ -167,7 +167,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     }
     if (parts[0] === 'events' && parts.length === 1) return openStream(res)
     if (parts[0] === 'crew' && parts.length === 1) {
-      return send(res, 200, { crew: await loadCrew(), own: await ownAgents(), talk: Boolean(talk) })
+      return send(res, 200, { crew: await loadCrew(), own: opts.demo ? [] : await ownAgents(), talk: Boolean(talk) })
     }
     return send(res, 404, { error: 'Not found.' })
   }
