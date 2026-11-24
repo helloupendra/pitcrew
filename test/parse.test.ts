@@ -55,6 +55,8 @@ describe('Parser on a real-shaped Claude Code session', () => {
     expect(meta.branch).toBe('fix/discount')
     expect(meta.model).toBe('claude-sonnet-5-5')
     expect([meta.linesAdded, meta.linesRemoved]).toEqual([3, 2])
+    expect(meta.costUSD).toBe(0.12)
+    expect(meta.tokens).toBe(42_000)
     expect(meta.plan).toEqual([
       { text: 'Apply the discount in total()', status: 'in_progress' },
       { text: 'Run the tests', status: 'pending' },

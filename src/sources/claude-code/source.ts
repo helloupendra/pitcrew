@@ -300,6 +300,8 @@ export class ClaudeCodeSource {
       branch: meta.branch,
       linesAdded: meta.linesAdded,
       linesRemoved: meta.linesRemoved,
+      costUSD: meta.costUSD,
+      tokens: meta.tokens,
       plan: meta.plan,
       sizeBytes: info.size,
     }

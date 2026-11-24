@@ -52,6 +52,7 @@ export function CrewPage({ onError }: { onError: (e: unknown) => void }) {
         </p>
       </header>
 
+      {!data.talk && <p className="muted small">Running an agent from this page needs Talk, which is off in the demo and with --read-only.</p>}
       <ul className="cards crew-cards">
         {data.crew.map((a) => (
           <AgentCard key={a.id} id={a.id} title={a.title} text={a.short} extra={`/${a.command} · ${a.tools.join(', ')}`} placeholder={a.task} projects={projects} talk={data.talk} />

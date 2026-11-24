@@ -100,7 +100,7 @@ export function Composer({ placeholder, disabled, note, sendLabel = 'Send', busy
 /** The message box under a session's timeline, with Stop when Pitcrew is running it. */
 export function SessionTalk({ id, talk, onSent }: { id: string; talk?: TalkInfo; onSent: () => void }) {
   const [stopping, setStopping] = useState(false)
-  if (!talk?.enabled) return <p className="muted small talk-off">Talk is off: Pitcrew was started read-only.</p>
+  if (!talk?.enabled) return <p className="muted small talk-off">{talk?.why ?? 'Talk is off.'}</p>
 
   const running = talk.here && (talk.state === 'working' || talk.state === 'starting')
   const stop = async () => {

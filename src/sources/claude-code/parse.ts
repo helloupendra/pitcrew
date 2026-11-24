@@ -47,6 +47,9 @@ export interface SessionMeta {
   lastAt?: string
   linesAdded?: number
   linesRemoved?: number
+  /** Claude Code's own running estimate, at API prices, and the tokens behind it. */
+  costUSD?: number
+  tokens?: number
   plan?: PlanItem[]
   last?: LastEvent
 }
@@ -124,6 +127,8 @@ export class Parser {
       case 'cost-state':
         if (typeof line.totalLinesAdded === 'number') this.meta.linesAdded = line.totalLinesAdded
         if (typeof line.totalLinesRemoved === 'number') this.meta.linesRemoved = line.totalLinesRemoved
+        if (typeof line.totalCostUSD === 'number') this.meta.costUSD = line.totalCostUSD
+        if (isObject(line.modelUsage)) this.meta.tokens = tokensOf(line.modelUsage)
         return
       case 'user':
       case 'assistant':
@@ -429,6 +434,18 @@ export function cleanPrompt(raw: string): string {
     .replace(/<(system-reminder|ide_opened_file|ide_selection|local-command-caveat|local-command-stdout|local-command-stderr)\b[^>]*>[\s\S]*?<\/\1>/g, '')
     .replace(/<pasted_content\b[^>]*>([\s\S]*?)<\/pasted_content>/g, '$1')
     .trim()
+}
+
+/** All tokens across models: input, output, and the cache reads and writes. */
+function tokensOf(usage: Json): number {
+  let n = 0
+  for (const m of Object.values(usage)) {
+    if (!isObject(m)) continue
+    for (const k of ['inputTokens', 'outputTokens', 'cacheReadInputTokens', 'cacheCreationInputTokens']) {
+      if (typeof m[k] === 'number') n += m[k] as number
+    }
+  }
+  return n
 }
 
 /** Image blocks (base64) in a message or a tool result, in the types a browser shows. */

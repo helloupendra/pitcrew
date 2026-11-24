@@ -84,6 +84,7 @@ class HttpError extends Error {
 export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   const { source } = opts
   const elsewhere = opts.elsewhere ?? findElsewhere
+  const talkOff = opts.demo ? 'Talk is off in the demo: its projects are made up.' : 'Talk is off: Pitcrew was started with --read-only, or Claude Code was not found.'
   const clients = new Set<http.ServerResponse>()
   let port = opts.port
   const bridgeToken = randomBytes(24).toString('base64url')
@@ -167,7 +168,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     }
     if (parts[0] === 'events' && parts.length === 1) return openStream(res)
     if (parts[0] === 'crew' && parts.length === 1) {
-      return send(res, 200, { crew: await loadCrew(), own: await ownAgents(), talk: Boolean(talk) })
+      return send(res, 200, { crew: await loadCrew(), own: opts.demo ? [] : await ownAgents(), talk: Boolean(talk) })
     }
     return send(res, 404, { error: 'Not found.' })
   }
@@ -308,7 +309,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   }
 
   async function talkInfo(id: string, s: SessionDetail): Promise<TalkInfo> {
-    if (!talk) return { enabled: false, here: false, canReply: false, canCopy: false, why: 'Pitcrew was started read-only.' }
+    if (!talk) return { enabled: false, here: false, canReply: false, canCopy: false, why: talkOff }
     const run = talk.run(id)
     const here = Boolean(run && run.state !== 'ended')
     const held = here ? undefined : await heldElsewhere(id, s.summary.status, (await source.sessionInfo(id))?.cwd)

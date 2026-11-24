@@ -67,6 +67,9 @@ export interface SessionSummary {
   branch?: string
   linesAdded?: number
   linesRemoved?: number
+  /** Claude Code's own estimate at API prices (not what a subscription pays), and its tokens. */
+  costUSD?: number
+  tokens?: number
   plan?: PlanItem[]
   sizeBytes: number
 }

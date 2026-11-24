@@ -199,6 +199,15 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
               ))}
             </ul>
           )}
+          {s.costUSD !== undefined || s.tokens ? (
+            <>
+              <h2 className="section">Cost</h2>
+              <p className="small" title="Claude Code's own estimate at API prices. On a subscription you do not pay this per session.">
+                {s.costUSD !== undefined ? usd(s.costUSD) : 'not known'}
+                {s.tokens ? <span className="muted"> · {compact(s.tokens)} tokens</span> : null}
+              </p>
+            </>
+          ) : null}
           <h2 className="section">Commands</h2>
           <p className="small">
             {plural(commands.total, 'command')}
@@ -217,6 +226,18 @@ function jumpToLatest(e: React.MouseEvent): void {
 }
 
 const narrow = () => window.matchMedia('(max-width: 820px)').matches
+
+function usd(n: number): string {
+  if (n > 0 && n < 0.01) return 'under $0.01'
+  return '$' + n.toFixed(2)
+}
+
+function compact(n: number): string {
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B'
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
+  if (n >= 1e3) return Math.round(n / 1e3) + 'k'
+  return String(n)
+}
 
 function nearBottom(): boolean {
   const el = document.documentElement
