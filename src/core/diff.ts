@@ -4,7 +4,11 @@ const MAX_LINES = 400
 /** Above this many cells the line-by-line match is skipped and the change is shown as remove + add. */
 const MAX_CELLS = 250_000
 
-const split = (s: string): string[] => (s === '' ? [] : s.replace(/\r\n/g, '\n').split('\n'))
+/** Lines of a snippet; a final newline ends the last line rather than starting an empty one. */
+const split = (s: string): string[] => {
+  const text = s.replace(/\r\n/g, '\n').replace(/\n$/, '')
+  return text === '' && s.length <= 1 ? [] : text.split('\n')
+}
 
 /** A line diff between two snippets (longest common subsequence). */
 export function lineDiff(before: string, after: string): DiffLine[] {

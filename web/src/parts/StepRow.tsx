@@ -6,10 +6,12 @@ interface Props {
   step: Step
   open: boolean
   onToggle: () => void
+  /** The agent asked your permission for this step and is waiting. */
+  asking?: boolean
 }
 
 /** Messages are shown in full; everything else is one line that opens to show the detail. */
-export function StepRow({ step, open, onToggle }: Props) {
+export function StepRow({ step, open, onToggle, asking }: Props) {
   if (step.kind === 'you' || step.kind === 'agent') {
     return (
       <li className={`step msg msg-${step.kind}`} id={`step-${step.n}`}>
@@ -23,12 +25,13 @@ export function StepRow({ step, open, onToggle }: Props) {
   }
 
   const detail = hasDetail(step)
-  const state = step.pending ? 'running' : step.failed ? 'failed' : undefined
+  const state = step.pending ? (asking ? 'asking' : 'running') : step.failed ? 'failed' : undefined
+  const FLAG = { running: 'running…', asking: 'waiting for your OK', failed: 'failed' }
   const head = (
     <>
       <span className="title">{step.title}</span>
       <Changes added={step.added} removed={step.removed} />
-      {state && <span className={`flag flag-${state}`}>{state === 'running' ? 'running…' : 'failed'}</span>}
+      {state && <span className={`flag flag-${state}`}>{FLAG[state]}</span>}
     </>
   )
 

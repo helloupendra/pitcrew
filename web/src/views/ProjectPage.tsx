@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Project, SessionSummary } from '../../../src/core/types'
-import { get, serialLoader, useChanges } from '../api'
+import { get, post, serialLoader, useChanges } from '../api'
 import { ago, plural, tilde } from '../format'
+import { Composer } from '../parts/talk'
 import { Activity, Changes, Status, useNow } from '../parts/ui'
 
 const REFRESH_MS = 10_000
 
 export function ProjectPage({ id, onError }: { id: string; onError: (e: unknown) => void }) {
-  const [data, setData] = useState<{ project: Project; sessions: SessionSummary[] }>()
+  const [data, setData] = useState<{ project: Project; sessions: SessionSummary[]; talk?: boolean }>()
+  const [composing, setComposing] = useState(false)
   const now = useNow()
 
   const load = useMemo(
-    () => serialLoader(() => get<{ project: Project; sessions: SessionSummary[] }>(`/api/projects/${encodeURIComponent(id)}`).then(setData, onError)),
+    () => serialLoader(() => get<{ project: Project; sessions: SessionSummary[]; talk?: boolean }>(`/api/projects/${encodeURIComponent(id)}`).then(setData, onError)),
     [id, onError],
   )
   useEffect(() => {
@@ -40,7 +42,32 @@ export function ProjectPage({ id, onError }: { id: string; onError: (e: unknown)
         <p className="head-activity muted small">
           <Activity days={project.activity} now={now} /> {plural(sessions.length, 'session')}
         </p>
+        {data.talk && !composing && (
+          <button type="button" className="btn btn-primary new-session" onClick={() => setComposing(true)}>
+            New session
+          </button>
+        )}
       </header>
+
+      {composing && (
+        <section className="new-box">
+          <Composer
+            placeholder={`What should the agent do in ${project.name}?`}
+            note="Starts your own Claude Code in this folder. Anything it wants to change waits for your Allow."
+            busyLabel="Starting…"
+            onSend={async (text) => {
+              const r = await post<{ sessionId: string; error?: string }>('/api/talk/new', { projectId: project.id, text })
+              if (r.error) throw new Error(r.error)
+              location.hash = `#/s/${r.sessionId}`
+            }}
+            extra={
+              <button type="button" className="btn" onClick={() => setComposing(false)}>
+                Cancel
+              </button>
+            }
+          />
+        </section>
+      )}
 
       <ul className="rows">
         {sessions.map((s) => (

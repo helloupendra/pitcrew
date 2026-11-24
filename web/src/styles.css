@@ -782,6 +782,10 @@ main {
 .flag-failed {
   color: var(--minus);
 }
+.flag-asking {
+  color: var(--waiting);
+  font-weight: 600;
+}
 
 .detail {
   margin: 6px 0 10px 18px;
@@ -834,6 +838,110 @@ main {
 .d-gap {
   padding-left: 24px !important;
   color: var(--text-3);
+}
+
+/* ---- talk: buttons, message box, permission asks ---- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 550;
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--text-3);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  border-color: var(--accent);
+  filter: brightness(1.08);
+}
+
+.new-session {
+  margin-top: 14px;
+}
+.new-box {
+  margin-top: 16px;
+}
+
+.composer {
+  position: sticky;
+  bottom: 12px;
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.composer:focus-within {
+  border-color: var(--accent);
+}
+.composer textarea {
+  display: block;
+  width: 100%;
+  padding: 12px 14px 4px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--text);
+  font: 14px/1.5 var(--sans);
+}
+.composer.is-disabled textarea {
+  cursor: not-allowed;
+}
+.composer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px 8px 14px;
+}
+.composer-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex: none;
+}
+.talk-off {
+  margin-top: 20px;
+}
+
+.ask {
+  margin: 14px 0 0 calc(5.6em + 12px);
+  padding: 12px 14px;
+  border: 1px solid var(--waiting);
+  border-left-width: 3px;
+  border-radius: var(--r);
+  background: var(--surface);
+}
+.ask-head {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--waiting);
+}
+.ask-title {
+  margin: 2px 0 0;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.ask-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 /* ---- phones ---- */
@@ -898,5 +1006,8 @@ main {
   }
   .when .sec {
     display: none;
+  }
+  .ask {
+    margin-left: 0;
   }
 }

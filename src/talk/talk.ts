@@ -101,12 +101,13 @@ export class Talk {
   }
 
   /** Called by the bridge: a tool wants permission. Returns the ask's id. */
-  ask(sessionId: string, tool: string, input: Record<string, unknown>, cwd?: string): string {
+  ask(sessionId: string, tool: string, input: Record<string, unknown>, cwd?: string, toolUseId?: string): string {
     const step = describeTool(tool, input, cwd)
     const ask: PendingAsk = {
       id: randomUUID(),
       sessionId,
       tool,
+      toolUseId,
       title: wish(step.kind, step.title),
       command: step.command,
       path: step.path,

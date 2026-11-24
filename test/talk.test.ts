@@ -82,7 +82,9 @@ describe('talk', () => {
       () => get<SessionDetail>(`api/sessions/${sessionId}`),
       (s) => (s.asks?.length ?? 0) > 0,
     )
-    expect(asked.asks![0]).toMatchObject({ tool: 'Bash', title: 'Run: Say hi', command: 'echo hi' })
+    expect(asked.asks![0]).toMatchObject({ tool: 'Bash', title: 'Run: Say hi', command: 'echo hi', toolUseId: 'toolu_fake' })
+    // the step is not counted as a changed file or a done command while it waits
+    expect(asked.steps.find((x) => x.id === 'toolu_fake')?.pending).toBe(true)
     expect(asked.summary.status).toBe('waiting')
     const o = await get<Overview>('api/overview')
     expect(o.live.find((s) => s.id === sessionId)?.now).toBe('Wants your OK: Run: Say hi')
