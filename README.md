@@ -22,7 +22,7 @@ It prints a link with a key in it and opens it in your browser. (On npm soon as 
 
 ## What you see
 
-**The pit wall.** Agents that are working, waiting, or done and waiting for your reply, most urgent first. Below them, every project that has sessions, with its real folder.
+**The pit wall.** How many agents are working, waiting for you, or done and waiting for your reply. Each live session as a card with its plan progress and lines changed, most urgent first. Every project with its branch, uncommitted files and the last seven days of activity. On the right, a feed of what every agent did, across all projects.
 
 **A session.** The whole run in plain words: your messages, the agent's replies, each file it read, each edit with its diff, each command with its output. The plan the agent is following and what it is doing right now stay beside the timeline while you scroll. Long sessions open at the latest step and load earlier steps on request, even when the session file is over a gigabyte.
 
