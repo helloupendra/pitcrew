@@ -1,13 +1,16 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { SessionDetail, Step } from '../../../src/core/types'
-import { get, serialLoader, useChanges } from '../api'
+import { ApiError, get, serialLoader, useChanges } from '../api'
 import { ago, clock, dayLabel, plural, tilde } from '../format'
 import { StepRow } from '../parts/StepRow'
+import { AskCard, SessionTalk } from '../parts/talk'
 import { Changes, Plan, Status, useNow } from '../parts/ui'
 
 const REFRESH_MS = 10_000
 /** Within this distance of the bottom, new steps keep the page scrolled to the latest. */
 const FOLLOW_PX = 160
+/** A session started from the page may need a few seconds before its file exists. */
+const STARTING_TRIES = 30
 
 export function SessionPage({ id, onError }: { id: string; onError: (e: unknown) => void }) {
   const [detail, setDetail] = useState<SessionDetail>()
@@ -18,6 +21,8 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
   const stepsRef = useRef<Step[]>([])
   const follow = useRef(true)
   const scrollToEnd = useRef(true)
+  const missing = useRef(0)
+  const [starting, setStarting] = useState(false)
   const now = useNow()
 
   stepsRef.current = steps
@@ -42,7 +47,16 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
           } else {
             setSteps((prev) => [...prev.filter((s) => s.n < after), ...d.steps])
           }
+          missing.current = 0
+          setStarting(false)
         } catch (e) {
+          if (e instanceof ApiError && e.status === 404 && missing.current < STARTING_TRIES) {
+            missing.current++
+            setStarting(true)
+            setTimeout(() => load(), 1_000)
+            return
+          }
+          setStarting(false)
           onError(e)
         }
       }),
@@ -54,6 +68,7 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
     setSteps([])
     stepsRef.current = []
     setOpen(new Set())
+    missing.current = 0
     load()
     const t = setInterval(load, REFRESH_MS)
     return () => clearInterval(t)
@@ -103,8 +118,9 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
     requestAnimationFrame(() => document.getElementById(`step-${last.n}`)?.scrollIntoView({ block: 'center' }))
   }
 
-  if (!detail) return <p className="muted pad">Loading…</p>
+  if (!detail) return <p className="muted pad">{starting ? 'Starting the session…' : 'Loading…'}</p>
   const { summary: s, project, files, commands } = detail
+  const asking = new Set((detail.asks ?? []).map((a) => a.toolUseId).filter(Boolean))
   const facts = [s.branch, s.model, s.startedAt ? `started ${clock(s.startedAt)}` : undefined].filter(Boolean).join(' · ')
 
   return (
@@ -141,11 +157,22 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
                       {dayLabel(step.at)}
                     </li>
                   ) : null}
-                  <StepRow step={step} open={open.has(step.id)} onToggle={() => toggle(step.id)} />
+                  <StepRow step={step} open={open.has(step.id)} onToggle={() => toggle(step.id)} asking={asking.has(step.id)} />
                 </Fragment>
               )
             })}
           </ol>
+          {detail.asks?.map((a) => (
+            <AskCard key={a.id} ask={a} onDone={load} />
+          ))}
+          <SessionTalk
+            id={id}
+            talk={detail.talk}
+            onSent={() => {
+              follow.current = true
+              load()
+            }}
+          />
           <span id="latest" />
         </section>
 

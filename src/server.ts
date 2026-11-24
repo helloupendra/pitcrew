@@ -134,7 +134,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     }
     if (parts[0] === 'projects' && parts.length === 2) {
       const p = await source.project(decodeURIComponent(parts[1]!))
-      return p ? send(res, 200, { ...p, sessions: p.sessions.map(withTalk) }) : send(res, 404, { error: 'No such project.' })
+      return p ? send(res, 200, { ...p, sessions: p.sessions.map(withTalk), talk: Boolean(talk) }) : send(res, 404, { error: 'No such project.' })
     }
     if (parts[0] === 'sessions' && parts.length === 2) {
       const id = parts[1]!
@@ -210,7 +210,8 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       const id = sessionId(body.session)
       const input = typeof body.input === 'object' && body.input !== null ? (body.input as Record<string, unknown>) : {}
       const cwd = (await source.sessionInfo(id))?.cwd
-      return send(res, 201, { id: talk.ask(id, String(body.tool ?? 'tool'), input, cwd) })
+      const toolUseId = typeof body.toolUseId === 'string' ? body.toolUseId : undefined
+      return send(res, 201, { id: talk.ask(id, String(body.tool ?? 'tool'), input, cwd, toolUseId) })
     }
     if (req.method === 'GET' && parts.length === 3) {
       const d = await talk.wait(parts[2]!, ASK_WAIT_MS)

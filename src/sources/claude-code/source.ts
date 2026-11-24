@@ -394,7 +394,8 @@ const byUrgency = (a: SessionSummary, b: SessionSummary) => URGENCY[a.status] - 
 function filesTouched(steps: Step[]): FileTouched[] {
   const files = new Map<string, FileTouched>()
   for (const s of steps) {
-    if ((s.kind !== 'edit' && s.kind !== 'write') || !s.path || s.failed) continue
+    // Only changes that happened: a refused or still-waiting edit changed nothing.
+    if ((s.kind !== 'edit' && s.kind !== 'write') || !s.path || s.failed || s.pending) continue
     const f = files.get(s.path) ?? { path: s.path, added: 0, removed: 0, created: false, edits: 0 }
     f.added += s.added ?? 0
     f.removed += s.removed ?? 0

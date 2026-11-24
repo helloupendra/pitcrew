@@ -111,6 +111,8 @@ export interface Ask {
   id: string
   sessionId: string
   tool: string
+  /** The tool call in the session file this question is about, when Claude Code says. */
+  toolUseId?: string
   /** What it wants to do, in plain words: "Run: npm test", "Edit src/app.ts". */
   title: string
   command?: string

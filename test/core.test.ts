@@ -18,6 +18,14 @@ describe('lineDiff', () => {
     ])
   })
 
+  it('treats a final newline as the end of the last line', () => {
+    expect(lineDiff('', 'hello\n')).toEqual([{ t: '+', s: 'hello' }])
+    expect(lineDiff('a\n', 'a\nb\n')).toEqual([
+      { t: ' ', s: 'a' },
+      { t: '+', s: 'b' },
+    ])
+  })
+
   it('stays bounded on huge changes', () => {
     const big = Array.from({ length: 2000 }, (_, i) => `line ${i}`).join('\n')
     const out = lineDiff(big, big.replace(/line/g, 'row'))

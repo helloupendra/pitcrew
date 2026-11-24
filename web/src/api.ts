@@ -25,14 +25,33 @@ export function readToken(): void {
 
 export class AuthError extends Error {}
 
-export async function get<T>(path: string): Promise<T> {
-  const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } })
+/** An answer the server gave with a reason, e.g. 409 "busy in another window". */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message)
+  }
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(path, { ...init, headers: { Authorization: `Bearer ${token}`, ...(init.headers ?? {}) } })
   if (res.status === 401) throw new AuthError('Open the link printed in your terminal.')
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string }
-    throw new Error(body.error ?? `The server answered ${res.status}.`)
+    throw new ApiError(res.status, body.error ?? `The server answered ${res.status}.`)
   }
   return (await res.json()) as T
+}
+
+export function get<T>(path: string): Promise<T> {
+  return request<T>(path)
+}
+
+/** Changes something. The token goes in the header and the body is JSON, as the server requires. */
+export function post<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 }
 
 type Listener = (sessions: string[]) => void

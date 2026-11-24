@@ -1,6 +1,6 @@
 # Pitcrew
 
-**A pit wall for your coding agents.** See every Claude Code session on your machine, live, on one quiet page: what each agent is doing right now, what it changed, which command failed, and which one is waiting for you.
+**A pit wall for your coding agents.** See every Claude Code session on your machine, live, on one quiet page: what each agent is doing right now, what it changed, which command failed, and which one is waiting for you. Then talk to it from the same page: send a message, answer its permission questions with Allow or Deny, or stop it.
 
 Local only. No account, no cloud, nothing sent anywhere.
 
@@ -28,6 +28,8 @@ It prints a link with a key in it and opens it in your browser. (On npm soon as 
 
 ![A session: the timeline, an edit opened, the plan beside it](docs/session.png)
 
+**Talk.** Write to an agent from the bottom of its session, or press **New session** on a project to start one. Pitcrew runs your own Claude Code (`claude -p`), so your login, settings and allowed tools apply as usual. Whenever Claude Code would ask for permission, the question comes to the page with the command or the diff, and nothing happens until you press **Allow** or **Deny**. A session that is busy in a terminal or in your editor is left alone: reply there.
+
 It works on a phone screen too, in light and dark.
 
 ## What the statuses mean
@@ -44,7 +46,9 @@ It works on a phone screen too, in light and dark.
 - Listens on `127.0.0.1` only, so other machines on your network cannot reach it.
 - Every API call needs the key from the link printed in your terminal, so another web page in your browser cannot read your sessions.
 - Answers only to the host names `127.0.0.1` and `localhost`, which blocks DNS-rebinding tricks.
-- Read only: it never writes to your session files and accepts no POST requests.
+- It never writes to your session files; Claude Code does, as always.
+- Anything that changes something (a message, Allow/Deny, Stop) needs the key in a request header and a JSON body, which a form on another site cannot send. Start with `--read-only` to turn Talk off completely.
+- Nothing is approved for you. Permission questions go to the page through a tiny local bridge (an MCP server Claude Code starts) with its own key.
 - No telemetry, no analytics, no fonts or scripts from the internet. The page has a strict Content Security Policy.
 
 ## How it works
@@ -57,15 +61,16 @@ Claude Code writes each session to `~/.claude/projects/<project>/<session>.jsonl
 
 Bookkeeping lines (request logs, file snapshots, account details) are skipped without being parsed.
 
+When you send a message, Pitcrew starts `claude -p` with streaming JSON in and out, in the session's own folder: `--resume <id>` to continue a session, or `--session-id <new id>` for a new one. It stays open for your next message and closes after 15 quiet minutes. Claude Code writes the session file as usual, so the timeline updates the same way as for any other session.
+
 ```
-pitcrew [--demo] [--port 4747] [--dir <sessions folder>] [--no-open]
+pitcrew [--demo] [--port 4747] [--dir <sessions folder>] [--read-only] [--claude <path>] [--no-open]
 ```
 
 `--dir` defaults to `~/.claude/projects`, or `$CLAUDE_CONFIG_DIR/projects` when that is set.
 
 ## What comes next
 
-- **Talk:** reply to a session from the page, and approve or refuse what it asks.
 - **The crew:** specialist agents (QA, code review, security, tests) you start on a project with one click and watch work.
 - **The pit lane:** an optional view where each live agent sits in its own pit box and you can see at a glance who is working, waiting or done.
 - **More agents:** Codex and other coding agents, next to Claude Code.
