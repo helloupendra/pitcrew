@@ -41,6 +41,17 @@ process.stdin.on('end', () => queue.then(() => process.exit(0)))
 async function onMessage(m) {
   const text = m.message.content[0].text
   write({ type: 'user', message: { role: 'user', content: text } })
+  if (text.includes('background')) {
+    // Like a helper agent started with run_in_background: the turn ends at once,
+    // and a task-notification arrives later as a new turn.
+    out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_bg', name: 'Agent', input: { description: 'helper', run_in_background: true } }] } })
+    out({ type: 'result', subtype: 'success', is_error: false, result: 'started a helper' })
+    await new Promise((r) => setTimeout(r, Number(process.env.FAKE_BACKGROUND_MS ?? 700)))
+    out({ type: 'user', message: { role: 'user', content: '<task-notification><summary>helper done</summary></task-notification>' } })
+    out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'The helper finished.' }] } })
+    out({ type: 'result', subtype: 'success', is_error: false, result: 'helper done' })
+    return
+  }
   if (text.includes('ask')) {
     const input = { command: 'echo hi', description: 'Say hi' }
     write({ type: 'assistant', message: { role: 'assistant', model: 'fake', content: [{ type: 'tool_use', id: 'toolu_fake', name: 'Bash', input }], stop_reason: 'tool_use' } })
