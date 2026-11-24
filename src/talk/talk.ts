@@ -38,6 +38,8 @@ export interface TalkOptions {
   onChange: (sessionId: string) => void
   /** A run with nothing to do for this long is closed (it resumes on the next message). */
   idleMs?: number
+  /** How long a quiet run is kept open for background work that has not reported back. */
+  backgroundMaxMs?: number
 }
 
 interface Run extends RunInfo {
@@ -45,6 +47,10 @@ interface Run extends RunInfo {
   stderr: string
   sawResult: boolean
   idleTimer?: NodeJS.Timeout
+  /** Background work the session started (a helper agent or a command with run_in_background) that has not reported back. */
+  background: number
+  /** When the last turn ended; the idle limit for background work counts from here. */
+  idleSince: number
 }
 
 interface PendingAsk extends Ask {
@@ -54,6 +60,8 @@ interface PendingAsk extends Ask {
 
 const IDLE_MS = 15 * 60_000
 const STOP_GRACE_MS = 3_000
+/** A helper that never reports back still lets the process go after this long. */
+const BACKGROUND_MAX_MS = 6 * 60 * 60_000
 
 export class Talk {
   private readonly runs = new Map<string, Run>()
@@ -188,7 +196,7 @@ export class Talk {
       ...extraArgs,
     ]
     const child = spawn(this.opts.claude, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
-    const run: Run = { child, state: 'starting', startedAt: new Date().toISOString(), stderr: '', sawResult: false }
+    const run: Run = { child, state: 'starting', startedAt: new Date().toISOString(), stderr: '', sawResult: false, background: 0, idleSince: 0 }
     this.runs.set(sessionId, run)
 
     let out = ''
@@ -221,24 +229,40 @@ export class Talk {
   }
 
   private onEvent(sessionId: string, run: Run, line: string): void {
-    let event: { type?: string; is_error?: boolean; result?: unknown }
+    let event: { type?: string; is_error?: boolean; result?: unknown; message?: { content?: unknown } }
     try {
       event = JSON.parse(line) as typeof event
     } catch {
       return
     }
     const before = run.state
+    run.background = Math.max(0, run.background + backgroundChange(event, line))
     if (event.type === 'result') {
       run.sawResult = true
       run.state = 'idle'
       run.error = event.is_error ? String(event.result ?? 'Claude Code reported an error.') : undefined
-      clearTimeout(run.idleTimer)
-      run.idleTimer = setTimeout(() => run.child.stdin?.end(), this.opts.idleMs ?? IDLE_MS)
-      run.idleTimer.unref()
+      run.idleSince = Date.now()
+      this.armIdle(run)
     } else if (event.type === 'assistant' || event.type === 'system') {
       run.state = 'working'
     }
     if (run.state !== before) this.opts.onChange(sessionId)
+  }
+
+  /**
+   * After a quiet spell the process is closed (the next message resumes the session),
+   * but never while background work it started is still running: closing would kill it.
+   * That waiting has a limit, in case a "finished" notice never comes.
+   */
+  private armIdle(run: Run): void {
+    clearTimeout(run.idleTimer)
+    run.idleTimer = setTimeout(() => {
+      if (run.state === 'ended') return
+      const waitingOnBackground = run.background > 0 && Date.now() - run.idleSince < (this.opts.backgroundMaxMs ?? BACKGROUND_MAX_MS)
+      if (waitingOnBackground || run.state !== 'idle') this.armIdle(run)
+      else run.child.stdin?.end()
+    }, this.opts.idleMs ?? IDLE_MS)
+    run.idleTimer.unref()
   }
 
   private ended(sessionId: string, run: Run): void {
@@ -278,6 +302,22 @@ function wish(kind: string, title: string): string {
 
 function publicAsk({ waiters: _w, decision: _d, ...ask }: PendingAsk): Ask {
   return ask
+}
+
+/**
+ * +1 for each tool call that starts work in the background (a helper agent or a
+ * command with run_in_background), −1 for each notice that such work finished.
+ */
+export function backgroundChange(event: { type?: string; message?: { content?: unknown } }, raw: string): number {
+  if (event.type === 'assistant' && Array.isArray(event.message?.content)) {
+    return event.message.content.filter(
+      (b: { type?: string; input?: { run_in_background?: unknown } }) => b?.type === 'tool_use' && b.input?.run_in_background === true,
+    ).length
+  }
+  if (event.type !== 'assistant' && raw.includes('<task-notification>')) {
+    return -(raw.match(/<task-notification>/g)?.length ?? 1)
+  }
+  return 0
 }
 
 function lastLine(text: string): string {
