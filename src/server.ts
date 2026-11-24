@@ -153,6 +153,12 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       if (!s) return send(res, 404, { error: 'No such session.' })
       return send(res, 200, { ...s, summary: withTalk(s.summary), talk: await talkInfo(id, s), asks: talk?.asksFor(id) ?? [] })
     }
+    if (parts[0] === 'sessions' && parts[2] === 'images' && parts.length === 5) {
+      const pic = source.picture(parts[1]!, decodeURIComponent(parts[3]!), Number(parts[4]))
+      if (!pic) return send(res, 404, { error: 'No such picture (open the session first).' })
+      res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': pic.type })
+      return void res.end(Buffer.from(pic.data, 'base64'))
+    }
     if (parts[0] === 'sessions' && parts[2] === 'earlier' && parts.length === 3) {
       const before = intParam(url, 'before')
       if (before === undefined) return send(res, 400, { error: 'before= is needed.' })

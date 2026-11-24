@@ -50,6 +50,8 @@ export interface Step {
   failed?: boolean
   /** The agent asked for this and nothing has come back yet. */
   pending?: boolean
+  /** Pictures in it (a screenshot it read, an image you sent), served by /api/sessions/:id/images/:step/:k. */
+  images?: number
 }
 
 export interface SessionSummary {

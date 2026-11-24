@@ -157,7 +157,7 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
                       {dayLabel(step.at)}
                     </li>
                   ) : null}
-                  <StepRow step={step} open={open.has(step.id)} onToggle={() => toggle(step.id)} asking={asking.has(step.id)} />
+                  <StepRow sessionId={id} step={step} open={open.has(step.id)} onToggle={() => toggle(step.id)} asking={asking.has(step.id)} />
                 </Fragment>
               )
             })}
