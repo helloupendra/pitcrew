@@ -11,7 +11,7 @@ Local only. No account, no cloud, nothing sent anywhere.
 Pitcrew needs Node.js 20 or newer.
 
 ```sh
-git clone <this repository> pitcrew && cd pitcrew
+git clone https://github.com/helloupendra/pitcrew.git && cd pitcrew
 npm install
 npm run build
 npm run demo      # made-up sessions, one of them playing live
