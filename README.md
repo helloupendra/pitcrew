@@ -11,14 +11,19 @@ Local only. No account, no cloud, nothing sent anywhere.
 Pitcrew needs Node.js 20 or newer, and Claude Code for the parts that talk to agents.
 
 ```sh
-git clone https://github.com/helloupendra/pitcrew.git && cd pitcrew
-npm install
-npm run build
-npm run demo      # made-up sessions, one of them playing live
-npm start         # your own Claude Code sessions
+npx pitcrew-cli --demo     # made-up sessions, one of them playing live
+npx pitcrew-cli            # your own Claude Code sessions
 ```
 
-It prints a link with a key in it and opens it in your browser. (On npm soon as `npx pitcrew`.)
+It prints a link with a key in it and opens it in your browser. To keep it around: `npm install -g pitcrew-cli`, then run `pitcrew`.
+
+From source:
+
+```sh
+git clone https://github.com/helloupendra/pitcrew.git && cd pitcrew
+npm install && npm run build
+npm run demo      # or: npm start
+```
 
 ## The pit wall
 
@@ -43,7 +48,7 @@ A session that is open in a terminal or in your editor is never continued in pla
 Six specialist agents, as ordinary Claude Code agent files: **QA tester**, **Code reviewer**, **Security auditor**, **Test writer**, **Docs writer** and **Dependency doctor**. Run one on any project from the Crew page or with one click on a project, or put them in Claude Code and use them from your terminal:
 
 ```sh
-npx pitcrew crew install     # then /qa /review /security /tests /docs /deps in Claude Code
+npx pitcrew-cli crew install     # then /qa /review /security /tests /docs /deps in Claude Code
 ```
 
 Make your own from the Crew page. More in [docs/crew.md](docs/crew.md).
@@ -72,7 +77,6 @@ pitcrew crew list
 ## What comes next
 
 - Codex and other coding agents, next to Claude Code.
-- `npx pitcrew` on npm.
 
 ## Develop
 

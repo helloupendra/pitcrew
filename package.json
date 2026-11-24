@@ -1,15 +1,27 @@
 {
-  "name": "pitcrew",
+  "name": "pitcrew-cli",
   "version": "0.1.0",
-  "description": "Your pit crew of coding agents. A local pit wall that shows every Claude Code session live, on your own machine.",
+  "description": "A local pit wall for your coding agents: watch every Claude Code session live, talk to it, and send in the crew (QA, review, security, tests).",
   "keywords": [
     "claude-code",
+    "claude",
     "coding-agents",
+    "ai-agents",
     "dashboard",
     "local-first",
-    "developer-tools"
+    "developer-tools",
+    "cli"
   ],
+  "homepage": "https://github.com/helloupendra/pitcrew#readme",
+  "bugs": {
+    "url": "https://github.com/helloupendra/pitcrew/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/helloupendra/pitcrew.git"
+  },
   "license": "MIT",
+  "author": "Upendra Singh Chauhan",
   "type": "module",
   "bin": {
     "pitcrew": "dist/cli.js"
