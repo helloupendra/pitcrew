@@ -104,9 +104,38 @@ export interface FileTouched {
   edits: number
 }
 
+/** Talk: a session Pitcrew runs itself, and the permission questions it is waiting on. */
+export type RunState = 'starting' | 'working' | 'idle' | 'ended'
+
+export interface Ask {
+  id: string
+  sessionId: string
+  tool: string
+  /** What it wants to do, in plain words: "Run: npm test", "Edit src/app.ts". */
+  title: string
+  command?: string
+  path?: string
+  diff?: DiffLine[]
+  at: string
+}
+
+export interface TalkInfo {
+  /** Talk is switched on (Pitcrew was not started with --read-only and found Claude Code). */
+  enabled: boolean
+  /** Pitcrew runs this session right now. */
+  here: boolean
+  state?: RunState
+  error?: string
+  canReply: boolean
+  /** Why you cannot reply, when you cannot. */
+  why?: string
+}
+
 export interface SessionDetail {
   summary: SessionSummary
   project: Pick<Project, 'id' | 'name' | 'path'>
+  talk?: TalkInfo
+  asks?: Ask[]
   steps: Step[]
   /** Parts of the session before the first step returned exist. */
   hasEarlier: boolean
@@ -123,4 +152,5 @@ export interface Overview {
   counts: { working: number; waiting: number; yourTurn: number; activeProjects: number }
   root: string
   demo: boolean
+  talk: boolean
 }

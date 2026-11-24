@@ -132,7 +132,7 @@ export class ClaudeCodeSource {
     return true
   }
 
-  async overview(): Promise<Omit<Overview, 'root' | 'demo'>> {
+  async overview(): Promise<Omit<Overview, 'root' | 'demo' | 'talk'>> {
     const all = await this.allSessions()
     const summaries = all.map((e) => e.summary)
     const byProject = new Map<string, SessionSummary[]>()
@@ -221,6 +221,20 @@ export class ClaudeCodeSource {
         failed: all.filter((s) => s.kind === 'run' && s.failed).length,
       },
     }
+  }
+
+  /** What Talk needs to know before it continues a session: where it runs and whether it is busy elsewhere. */
+  async sessionInfo(id: string): Promise<{ status: SessionStatus; cwd?: string; projectId: string } | undefined> {
+    const info = this.files.get(id)
+    if (!info) return undefined
+    const facts = await this.factsOf(info)
+    if (!facts) return undefined
+    return { status: this.summaryOf(info, facts).status, cwd: facts.meta.cwd, projectId: info.projectId }
+  }
+
+  /** Whether a session file is known (after a scan). */
+  has(id: string): boolean {
+    return this.files.has(id)
   }
 
   /** Steps before step `before`, reading an earlier part of the file if needed. */

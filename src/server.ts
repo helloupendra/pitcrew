@@ -1,9 +1,11 @@
-import { timingSafeEqual } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { readFile, stat } from 'node:fs/promises'
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import path from 'node:path'
+import type { SessionDetail, SessionSummary, TalkInfo } from './core/types.js'
 import type { ClaudeCodeSource } from './sources/claude-code/source.js'
+import { Talk } from './talk/talk.js'
 
 export interface ServerOptions {
   source: ClaudeCodeSource
@@ -11,6 +13,8 @@ export interface ServerOptions {
   token: string
   webDir: string
   demo: boolean
+  /** Talk settings; leave out for a read-only pit wall. */
+  talk?: { claude: string; bridge: string }
 }
 
 export interface RunningServer {
@@ -23,6 +27,13 @@ const FAST_POLL_MS = 1_000
 const FULL_SCAN_MS = 5_000
 const HEARTBEAT_MS = 20_000
 const PORT_TRIES = 20
+/** How long the bridge's "any answer yet?" request is held open. */
+const ASK_WAIT_MS = 25_000
+/** How long a new session gets to write its file before the page is sent to it anyway. */
+const NEW_SESSION_WAIT_MS = 20_000
+const MAX_BODY = 256 * 1024
+const MAX_MESSAGE = 100_000
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -42,20 +53,45 @@ const SECURITY_HEADERS = {
   'Cache-Control': 'no-store',
 }
 
+class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message)
+  }
+}
+
 /**
  * The pit wall's server. It listens on 127.0.0.1 only, answers the API only
  * with the token printed in the terminal, and refuses any Host header that is
  * not this machine (so a web page cannot reach it through DNS rebinding).
+ *
+ * Anything that changes something (sending a message, Allow/Deny, Stop) also
+ * needs the token in the Authorization header, never in the URL, and a JSON
+ * body: a plain form on another site can send neither.
  */
 export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   const { source } = opts
   const clients = new Set<http.ServerResponse>()
   let port = opts.port
+  const bridgeToken = randomBytes(24).toString('base64url')
+
+  const talk = opts.talk
+    ? new Talk({
+        claude: opts.talk.claude,
+        bridge: opts.talk.bridge,
+        bridgeToken,
+        serverUrl: () => `http://127.0.0.1:${port}/`,
+        onChange: (id) => broadcast([id]),
+      })
+    : undefined
 
   await source.scan()
 
   const server = http.createServer((req, res) => {
     handle(req, res).catch((err: unknown) => {
+      if (err instanceof HttpError) return send(res, err.status, { error: err.message })
       if (!res.headersSent) send(res, 500, { error: 'Something went wrong reading the sessions.' })
       else res.end()
       process.stderr.write(`pitcrew: ${err instanceof Error ? err.message : String(err)}\n`)
@@ -64,25 +100,47 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
 
   async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     if (!hostAllowed(req.headers.host, port)) return send(res, 403, { error: 'Pitcrew only answers on this machine.' })
-    if (req.method !== 'GET') return send(res, 405, { error: 'Read only.' })
     const url = new URL(req.url ?? '/', 'http://localhost')
+    const method = req.method ?? 'GET'
 
-    if (!url.pathname.startsWith('/api/')) return serveStatic(url.pathname, res)
-    if (!tokenOk(req, url, opts.token)) return send(res, 401, { error: 'Open the link printed in your terminal.' })
-
+    if (!url.pathname.startsWith('/api/')) {
+      if (method !== 'GET') return send(res, 405, { error: 'Not here.' })
+      return serveStatic(url.pathname, res)
+    }
     const parts = url.pathname.split('/').filter(Boolean).slice(1) // drop "api"
+
+    // The permission bridge has its own key and only these two routes.
+    if (parts[0] === 'talk' && parts[1] === 'asks' && isBridge(req)) return bridgeRoute(req, res, parts)
+
+    if (!tokenOk(req, url, opts.token, method === 'GET')) return send(res, 401, { error: 'Open the link printed in your terminal.' })
+    if (method === 'GET') return getRoute(res, url, parts)
+    if (method === 'POST') return postRoute(req, res, parts)
+    return send(res, 405, { error: 'Not allowed.' })
+  }
+
+  async function getRoute(res: http.ServerResponse, url: URL, parts: string[]): Promise<void> {
     if (parts[0] === 'overview' && parts.length === 1) {
       const o = await source.overview()
-      return send(res, 200, { ...o, root: source.root, demo: opts.demo })
+      const live = o.live.map(withTalk)
+      const count = (st: SessionSummary['status']) => live.filter((s) => s.status === st).length
+      return send(res, 200, {
+        ...o,
+        live,
+        counts: { ...o.counts, working: count('working'), waiting: count('waiting'), yourTurn: count('your-turn') },
+        root: source.root,
+        demo: opts.demo,
+        talk: Boolean(talk),
+      })
     }
     if (parts[0] === 'projects' && parts.length === 2) {
       const p = await source.project(decodeURIComponent(parts[1]!))
-      return p ? send(res, 200, p) : send(res, 404, { error: 'No such project.' })
+      return p ? send(res, 200, { ...p, sessions: p.sessions.map(withTalk) }) : send(res, 404, { error: 'No such project.' })
     }
     if (parts[0] === 'sessions' && parts.length === 2) {
-      const after = intParam(url, 'after')
-      const s = await source.session(parts[1]!, after)
-      return s ? send(res, 200, s) : send(res, 404, { error: 'No such session.' })
+      const id = parts[1]!
+      const s = await source.session(id, intParam(url, 'after'))
+      if (!s) return send(res, 404, { error: 'No such session.' })
+      return send(res, 200, { ...s, summary: withTalk(s.summary), talk: talkInfo(id, s), asks: talk?.asksFor(id) ?? [] })
     }
     if (parts[0] === 'sessions' && parts[2] === 'earlier' && parts.length === 3) {
       const before = intParam(url, 'before')
@@ -92,6 +150,102 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     }
     if (parts[0] === 'events' && parts.length === 1) return openStream(res)
     return send(res, 404, { error: 'Not found.' })
+  }
+
+  async function postRoute(req: http.IncomingMessage, res: http.ServerResponse, parts: string[]): Promise<void> {
+    if (!talk) throw new HttpError(403, 'Pitcrew was started read-only (--read-only).')
+    const body = await readJson(req)
+
+    // Reply to a session.
+    if (parts[0] === 'sessions' && parts[2] === 'messages' && parts.length === 3) {
+      const id = sessionId(parts[1])
+      const text = message(body)
+      const run = talk.run(id)
+      if (run && run.state !== 'ended') {
+        talk.send(id, '', text, 'resume')
+        return send(res, 202, { ok: true })
+      }
+      const info = await source.sessionInfo(id)
+      if (!info) throw new HttpError(404, 'No such session.')
+      if (info.status === 'working' || info.status === 'waiting') {
+        throw new HttpError(409, 'This session is busy in another window. Reply there, or wait until it finishes.')
+      }
+      const cwd = await folder(info.cwd)
+      talk.send(id, cwd, text, 'resume')
+      return send(res, 202, { ok: true })
+    }
+
+    // Stop a session Pitcrew runs.
+    if (parts[0] === 'sessions' && parts[2] === 'stop' && parts.length === 3) {
+      return send(res, 200, { stopped: talk.stop(sessionId(parts[1])) })
+    }
+
+    // Start a new session in a project.
+    if (parts[0] === 'talk' && parts[1] === 'new' && parts.length === 2) {
+      const projectId = typeof body.projectId === 'string' ? body.projectId : ''
+      const project = (await source.project(projectId))?.project
+      if (!project) throw new HttpError(404, 'No such project.')
+      const cwd = await folder(project.path)
+      const id = randomUUID()
+      talk.send(id, cwd, message(body), 'new')
+      const started = await until(async () => {
+        await source.scan()
+        return source.has(id) || talk.run(id)?.state === 'ended'
+      }, NEW_SESSION_WAIT_MS)
+      return send(res, 201, { sessionId: id, ready: started && source.has(id), error: talk.run(id)?.error })
+    }
+
+    // Allow or deny what an agent asked for.
+    if (parts[0] === 'talk' && parts[1] === 'asks' && parts.length === 3) {
+      if (typeof body.allow !== 'boolean') throw new HttpError(400, 'allow must be true or false.')
+      return send(res, 200, { ok: talk.decide(parts[2]!, body.allow) })
+    }
+    return send(res, 404, { error: 'Not found.' })
+  }
+
+  async function bridgeRoute(req: http.IncomingMessage, res: http.ServerResponse, parts: string[]): Promise<void> {
+    if (!talk) throw new HttpError(403, 'Talk is off.')
+    if (req.method === 'POST' && parts.length === 2) {
+      const body = await readJson(req)
+      const id = sessionId(body.session)
+      const input = typeof body.input === 'object' && body.input !== null ? (body.input as Record<string, unknown>) : {}
+      const cwd = (await source.sessionInfo(id))?.cwd
+      return send(res, 201, { id: talk.ask(id, String(body.tool ?? 'tool'), input, cwd) })
+    }
+    if (req.method === 'GET' && parts.length === 3) {
+      const d = await talk.wait(parts[2]!, ASK_WAIT_MS)
+      return send(res, 200, d ? { decided: true, ...d } : { decided: false })
+    }
+    return send(res, 404, { error: 'Not found.' })
+  }
+
+  function isBridge(req: http.IncomingMessage): boolean {
+    return safeEqual(bearer(req) ?? '', bridgeToken)
+  }
+
+  /** The session's status as the page should see it: an open question means it waits for you. */
+  function withTalk(s: SessionSummary): SessionSummary {
+    if (!talk) return s
+    const asks = talk.asksFor(s.id)
+    if (asks.length) return { ...s, status: 'waiting', now: `Wants your OK: ${asks[0]!.title}` }
+    const run = talk.run(s.id)
+    if (run?.state === 'starting' || run?.state === 'working') return { ...s, status: 'working' }
+    return s
+  }
+
+  function talkInfo(id: string, s: SessionDetail): TalkInfo {
+    if (!talk) return { enabled: false, here: false, canReply: false, why: 'Pitcrew was started read-only.' }
+    const run = talk.run(id)
+    const here = Boolean(run && run.state !== 'ended')
+    const busy = !here && (s.summary.status === 'working' || s.summary.status === 'waiting')
+    return {
+      enabled: true,
+      here,
+      state: run?.state,
+      error: run?.error,
+      canReply: !busy,
+      why: busy ? 'This session is busy in another window. Reply there, or wait until it finishes.' : undefined,
+    }
   }
 
   function openStream(res: http.ServerResponse): void {
@@ -159,6 +313,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       new Promise<void>((resolve) => {
         clearInterval(timer)
         clearInterval(heartbeat)
+        talk?.closeAll()
         for (const c of clients) c.end()
         server.close(() => resolve())
       }),
@@ -186,13 +341,69 @@ export function hostAllowed(host: string | undefined, port: number): boolean {
   return host === `127.0.0.1:${port}` || host === `localhost:${port}` || host === `[::1]:${port}`
 }
 
-export function tokenOk(req: http.IncomingMessage, url: URL, token: string): boolean {
+/** GET may carry the token as ?t= (the event stream cannot set headers); anything else needs the header. */
+export function tokenOk(req: http.IncomingMessage, url: URL, token: string, allowQuery = true): boolean {
+  const given = bearer(req) ?? (allowQuery ? url.searchParams.get('t') : null)
+  return given ? safeEqual(given, token) : false
+}
+
+function bearer(req: http.IncomingMessage): string | undefined {
   const header = req.headers.authorization
-  const given = header?.startsWith('Bearer ') ? header.slice(7) : url.searchParams.get('t')
-  if (!given) return false
-  const a = Buffer.from(given)
-  const b = Buffer.from(token)
-  return a.length === b.length && timingSafeEqual(a, b)
+  return header?.startsWith('Bearer ') ? header.slice(7) : undefined
+}
+
+function safeEqual(a: string, b: string): boolean {
+  const x = Buffer.from(a)
+  const y = Buffer.from(b)
+  return x.length === y.length && timingSafeEqual(x, y)
+}
+
+async function readJson(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+  if (!req.headers['content-type']?.startsWith('application/json')) throw new HttpError(415, 'Send JSON.')
+  const chunks: Buffer[] = []
+  let size = 0
+  for await (const chunk of req as AsyncIterable<Buffer>) {
+    size += chunk.length
+    if (size > MAX_BODY) throw new HttpError(413, 'Too long.')
+    chunks.push(chunk)
+  }
+  try {
+    const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) throw new Error()
+    return body as Record<string, unknown>
+  } catch {
+    throw new HttpError(400, 'That is not valid JSON.')
+  }
+}
+
+function sessionId(value: unknown): string {
+  if (typeof value !== 'string' || !UUID.test(value)) throw new HttpError(400, 'Not a session id.')
+  return value.toLowerCase()
+}
+
+function message(body: Record<string, unknown>): string {
+  const text = typeof body.text === 'string' ? body.text.trim() : ''
+  if (!text) throw new HttpError(400, 'Write a message first.')
+  if (text.length > MAX_MESSAGE) throw new HttpError(413, 'That message is too long.')
+  return text
+}
+
+async function folder(dir: string | undefined): Promise<string> {
+  try {
+    if (dir && (await stat(dir)).isDirectory()) return dir
+  } catch {
+    // fall through
+  }
+  throw new HttpError(409, `The project folder ${dir ?? ''} is not there any more.`)
+}
+
+async function until(check: () => Promise<boolean>, ms: number): Promise<boolean> {
+  const end = Date.now() + ms
+  while (Date.now() < end) {
+    if (await check()) return true
+    await new Promise((r) => setTimeout(r, 300))
+  }
+  return false
 }
 
 function intParam(url: URL, name: string): number | undefined {

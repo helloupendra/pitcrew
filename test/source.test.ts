@@ -189,8 +189,9 @@ describe('server', () => {
     expect((await fetch(`${server.url}..%2f..%2fetc%2fpasswd`)).status).toBe(404)
   })
 
-  it('is read only', async () => {
-    expect((await fetch(`${server.url}api/overview`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } })).status).toBe(405)
+  it('refuses every change when Talk is off', async () => {
+    expect((await fetch(`${server.url}api/overview`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } })).status).toBe(403)
+    expect((await fetch(`${server.url}`, { method: 'POST' })).status).toBe(405)
   })
 
   it('gives a session by id', async () => {
