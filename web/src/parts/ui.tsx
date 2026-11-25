@@ -2,11 +2,25 @@ import { useEffect, useState } from 'react'
 import type { PlanItem, SessionStatus } from '../../../src/core/types'
 import { STATUS_WORD } from '../format'
 
-/** A status is always a word; the dot only helps the eye. */
+/** The shape that goes with a status word: a solid dot (waiting), moving marks (working), a ring (your turn), a small dot (idle). */
+export function Glyph({ status }: { status: SessionStatus }) {
+  if (status === 'working') {
+    return (
+      <span className="g g-working" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </span>
+    )
+  }
+  return <span className={`g g-${status}`} aria-hidden="true" />
+}
+
+/** A status is always a word; the shape only helps the eye. */
 export function Status({ status }: { status: SessionStatus }) {
   return (
     <span className={`status status-${status}`}>
-      <span className="dot" aria-hidden="true" />
+      <Glyph status={status} />
       {STATUS_WORD[status]}
     </span>
   )
@@ -27,11 +41,11 @@ export function Plan({ items }: { items: PlanItem[] }) {
     <ol className="plan">
       {items.map((p, i) => (
         <li key={i} className={`plan-${p.status}`}>
-          <span className="plan-mark" aria-hidden="true">
-            {p.status === 'completed' ? '✓' : p.status === 'in_progress' ? '›' : '·'}
+          <span aria-hidden="true">{p.status === 'completed' ? '✓' : p.status === 'in_progress' ? '›' : '·'}</span>
+          <span>
+            {p.text}
+            {p.status === 'in_progress' ? <span className="sr"> (in progress)</span> : p.status === 'completed' ? <span className="sr"> (done)</span> : null}
           </span>
-          <span>{p.text}</span>
-          {p.status === 'in_progress' && <span className="sr">(in progress)</span>}
         </li>
       ))}
     </ol>
@@ -41,24 +55,24 @@ export function Plan({ items }: { items: PlanItem[] }) {
 export function Changes({ added, removed }: { added?: number; removed?: number }) {
   if (!added && !removed) return null
   return (
-    <span className="changes">
+    <span className="chg">
       {added ? <span className="plus">+{added}</span> : null}
       {removed ? <span className="minus">−{removed}</span> : null}
     </span>
   )
 }
 
-/** "3 of 5" with a thin bar: how far through its own plan the agent is. */
+/** "3 of 5" with one segment per plan step: how far through its own plan the agent is. */
 export function PlanProgress({ items }: { items: PlanItem[] }) {
   const done = items.filter((p) => p.status === 'completed').length
   return (
-    <span className="progress" title={items.find((p) => p.status === 'in_progress')?.text}>
-      <span className="progress-bar" aria-hidden="true">
-        <span style={{ width: `${(done / items.length) * 100}%` }} />
+    <span className="prog" title={items.find((p) => p.status === 'in_progress')?.text}>
+      <span className="seg" aria-hidden="true">
+        {items.map((p, i) => (
+          <i key={i} className={p.status === 'completed' ? 'd' : p.status === 'in_progress' ? 'c' : undefined} />
+        ))}
       </span>
-      <span className="small muted">
-        {done} of {items.length}
-      </span>
+      {done} of {items.length}
     </span>
   )
 }
@@ -73,11 +87,14 @@ export function Activity({ days, now }: { days: number[]; now: number }) {
     return `${day}: ${days[i]} ${days[i] === 1 ? 'session' : 'sessions'}`
   }
   return (
-    <span className="activity" role="img" aria-label={`Sessions per day, last 7 days: ${days.join(', ')}`}>
+    <span className="act" role="img" aria-label={`Sessions per day, last 7 days: ${days.join(', ')}`}>
       {days.map((n, i) => (
-        <span key={i} className={`activity-day${i === days.length - 1 ? ' today' : ''}`} title={label(i)}>
-          <span style={{ height: n ? `${Math.max(18, (n / max) * 100)}%` : '0' }} />
-        </span>
+        <i
+          key={i}
+          className={!n ? 'o' : i === days.length - 1 ? 't' : undefined}
+          style={n ? { height: `${Math.max(22, (n / max) * 100)}%` } : undefined}
+          title={label(i)}
+        />
       ))}
     </span>
   )
@@ -89,5 +106,17 @@ export function Message({ title, children }: { title: string; children?: React.R
       <h2>{title}</h2>
       {children}
     </div>
+  )
+}
+
+/** The small Pitcrew mark: two solid squares on a diagonal, two faint ones. */
+export function Mark() {
+  return (
+    <svg viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+      <rect width="6" height="6" rx="1" />
+      <rect x="8" y="8" width="6" height="6" rx="1" />
+      <rect x="8" width="6" height="6" rx="1" opacity=".3" />
+      <rect y="8" width="6" height="6" rx="1" opacity=".3" />
+    </svg>
   )
 }

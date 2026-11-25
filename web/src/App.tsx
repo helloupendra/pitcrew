@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { AuthError, connect } from './api'
 import { useWaitingAlerts } from './parts/alerts'
 import { Palette } from './parts/palette'
-import { Message } from './parts/ui'
+import { Mark, Message } from './parts/ui'
 import { CrewPage } from './views/CrewPage'
 import { LanePage } from './views/LanePage'
 import { Home } from './views/Home'
@@ -32,6 +32,9 @@ function savedTheme(): Theme {
     return 'system'
   }
 }
+
+/** The ⌘K palette listens for this, so any button can open it. */
+const openPalette = () => window.dispatchEvent(new Event('pitcrew:palette'))
 
 export function App() {
   const [route, setRoute] = useState<Route>(readRoute)
@@ -87,12 +90,16 @@ export function App() {
 
   return (
     <>
-      <header className="bar">
-        <a className="brand" href="#/">
-          Pitcrew
+      <header className="top">
+        <a className="brand" href="#/" aria-label="Pitcrew">
+          <Mark />
+          <span>Pitcrew</span>
         </a>
-        <span className={`conn ${connected ? 'on' : 'off'}`}>{connected ? 'Live' : 'Reconnecting…'}</span>
-        <nav className="nav">
+        <span className={`live${connected ? '' : ' off'}`} title={connected ? 'Live: changes show up as they happen' : 'Reconnecting…'}>
+          <i aria-hidden="true" />
+          <span>{connected ? 'Live' : 'Reconnecting…'}</span>
+        </span>
+        <nav className="nav" aria-label="Pages">
           <a href="#/" aria-current={route.page === 'home' ? 'page' : undefined}>
             Pit wall
           </a>
@@ -103,22 +110,37 @@ export function App() {
             Crew
           </a>
         </nav>
-        <span className="spacer" />
-        <span className="kbd-hint muted small" title="Go anywhere, or run the crew">
-          ⌘K
-        </span>
+        <span className="grow" />
+        <button type="button" className="kbtn" onClick={openPalette} aria-label="Go to or run (Command K)">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+            <circle cx="6" cy="6" r="4.2" />
+            <path d="M9.3 9.3 13 13" />
+          </svg>
+          <span>Go to or run…</span>
+          <kbd>⌘K</kbd>
+        </button>
         {alerts.state !== 'unsupported' && (
           <button
             type="button"
-            className={`theme alerts-${alerts.state}`}
+            className="tbtn"
+            aria-pressed={alerts.state === 'on'}
+            aria-label={alerts.state === 'on' ? 'Alerts on' : alerts.state === 'blocked' ? 'Alerts blocked' : 'Alerts off'}
             onClick={alerts.toggle}
             title={alerts.state === 'blocked' ? 'Notifications are blocked for this page in your browser settings' : 'A desktop notification when an agent waits for you'}
           >
-            {alerts.state === 'on' ? 'Alerts on' : alerts.state === 'blocked' ? 'Alerts blocked' : 'Alerts off'}
+            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
+              <path d="M3 8.5V5.5a3 3 0 0 1 6 0v3l1 1H2z" />
+              <path d="M5 11h2" />
+            </svg>
+            <span>{alerts.state === 'on' ? 'Alerts on' : alerts.state === 'blocked' ? 'Alerts blocked' : 'Alerts'}</span>
           </button>
         )}
-        <button type="button" className="theme" onClick={() => setTheme(NEXT_THEME[theme])} title="Switch theme">
-          {theme === 'system' ? 'Auto' : theme === 'light' ? 'Light' : 'Dark'}
+        <button type="button" className="tbtn" onClick={() => setTheme(NEXT_THEME[theme])} title="Theme: auto (your system), light or dark" aria-label={`Theme: ${theme === 'system' ? 'auto' : theme}`}>
+          <svg viewBox="0 0 12 12" aria-hidden="true">
+            <circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            <path d="M6 1a5 5 0 0 1 0 10z" fill="currentColor" />
+          </svg>
+          <span>{theme === 'system' ? 'Auto' : theme === 'light' ? 'Light' : 'Dark'}</span>
         </button>
       </header>
       <Palette />

@@ -34,8 +34,13 @@ export function Palette() {
         setOpen((o) => !o)
       }
     }
+    const onOpen = () => setOpen(true)
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('pitcrew:palette', onOpen)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('pitcrew:palette', onOpen)
+    }
   }, [])
 
   useEffect(() => {
@@ -100,8 +105,8 @@ export function Palette() {
   }
 
   return (
-    <div className="palette-backdrop" onMouseDown={() => setOpen(false)}>
-      <div className="palette" role="dialog" aria-label="Go to or run" onMouseDown={(e) => e.stopPropagation()}>
+    <div className="pal-bg" onMouseDown={() => setOpen(false)}>
+      <div className="pal" role="dialog" aria-modal="true" aria-label="Go to or run" onMouseDown={(e) => e.stopPropagation()}>
         <input
           ref={input}
           value={query}
@@ -116,15 +121,26 @@ export function Palette() {
         <ul>
           {shown.map((item, i) => (
             <li key={item.key}>
-              <button type="button" className={i === index ? 'is-active' : undefined} onMouseEnter={() => setIndex(i)} onClick={() => void choose(item)}>
+              <button type="button" className={i === index ? 'on' : undefined} onMouseEnter={() => setIndex(i)} onClick={() => void choose(item)}>
                 <span>{item.label}</span>
-                {item.hint && <span className="muted small">{item.hint}</span>}
+                {item.hint && <span>{item.hint}</span>}
               </button>
             </li>
           ))}
-          {!shown.length && <li className="muted small palette-empty">Nothing matches.</li>}
+          {!shown.length && <li className="pe">Nothing matches.</li>}
         </ul>
-        {error && <p className="minus small palette-empty">{error}</p>}
+        {error && <p className="pe minus">{error}</p>}
+        <p className="pal-f">
+          <span>
+            <kbd>↑</kbd> <kbd>↓</kbd> move
+          </span>
+          <span>
+            <kbd>Enter</kbd> open
+          </span>
+          <span>
+            <kbd>Esc</kbd> close
+          </span>
+        </p>
       </div>
     </div>
   )

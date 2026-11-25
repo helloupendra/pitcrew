@@ -45,30 +45,30 @@ export function CrewPage({ onError }: { onError: (e: unknown) => void }) {
     <div className="page">
       <header className="head">
         <h1>The crew</h1>
-        <p className="muted">
+        <p>
           Specialist agents for any project. Run one from here, or add them to Claude Code with{' '}
           <code>npx pitcrew-cli crew install</code> and use <code>/qa</code>, <code>/review</code>, <code>/security</code>,{' '}
           <code>/tests</code>, <code>/docs</code> and <code>/deps</code> in your terminal.
         </p>
       </header>
 
-      {!data.talk && <p className="muted small">Running an agent from this page needs Talk, which is off in the demo and with --read-only.</p>}
-      <ul className="cards crew-cards">
+      {!data.talk && <p className="hint">Running an agent from this page needs Talk, which is off in the demo and with --read-only.</p>}
+      <ul className="crew">
         {data.crew.map((a) => (
-          <AgentCard key={a.id} id={a.id} title={a.title} text={a.short} extra={`/${a.command} · ${a.tools.join(', ')}`} placeholder={a.task} projects={projects} talk={data.talk} />
+          <AgentCard key={a.id} id={a.id} title={a.title} text={a.short} command={a.command} tools={a.tools} placeholder={a.task} projects={projects} talk={data.talk} />
         ))}
       </ul>
 
       <section>
         <h2 className="section">Your own agents</h2>
         {data.own.length ? (
-          <ul className="cards crew-cards">
+          <ul className="crew">
             {data.own.map((a) => (
               <AgentCard key={a.id} id={a.id} title={a.id} text={a.description} placeholder="What should it do?" projects={projects} talk={data.talk} />
             ))}
           </ul>
         ) : (
-          <p className="muted small">None yet in ~/.claude/agents. Make one below, or install the crew.</p>
+          <p className="empty">None yet in ~/.claude/agents. Make one below, or install the crew.</p>
         )}
       </section>
 
@@ -81,13 +81,14 @@ interface CardProps {
   id: string
   title: string
   text: string
-  extra?: string
+  command?: string
+  tools?: string[]
   placeholder: string
   projects: Overview['projects']
   talk: boolean
 }
 
-function AgentCard({ id, title, text, extra, placeholder, projects, talk }: CardProps) {
+function AgentCard({ id, title, text, command, tools, placeholder, projects, talk }: CardProps) {
   const [projectId, setProjectId] = useState('')
   const [task, setTask] = useState('')
   const [busy, setBusy] = useState(false)
@@ -106,13 +107,15 @@ function AgentCard({ id, title, text, extra, placeholder, projects, talk }: Card
   }
 
   return (
-    <li>
-      <div className="card agent-card">
-        <span className="name">{title}</span>
-        <span className="small">{text}</span>
-        {extra && <span className="muted small mono">{extra}</span>}
-        {talk && projects.length > 0 && (
-          <div className="agent-run">
+    <li className="ag">
+      <span className="ag-h">
+        <b>{title}</b>
+        {command ? <code>/{command}</code> : null}
+      </span>
+      <span className="ag-p">{text}</span>
+      {tools?.length ? <span className="tools">Tools: {tools.join(', ')}</span> : null}
+      {talk && projects.length > 0 && (
+          <div className="ag-run">
             <select value={chosen} onChange={(e) => setProjectId(e.target.value)} aria-label={`Project for ${title}`}>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -121,13 +124,12 @@ function AgentCard({ id, title, text, extra, placeholder, projects, talk }: Card
               ))}
             </select>
             <input value={task} onChange={(e) => setTask(e.target.value)} placeholder={placeholder} aria-label={`Task for ${title}`} />
-            <button type="button" className="btn btn-primary" disabled={busy || !chosen} onClick={() => void run()}>
+            <button type="button" className="btn btn-primary btn-sm" disabled={busy || !chosen} onClick={() => void run()}>
               {busy ? 'Starting…' : 'Run'}
             </button>
           </div>
         )}
-        {error && <span className="minus small">{error}</span>}
-      </div>
+      {error && <span className="minus small">{error}</span>}
     </li>
   )
 }
@@ -156,7 +158,7 @@ function MakeAgent({ onMade }: { onMade: () => void }) {
   return (
     <section>
       <h2 className="section">Make your own</h2>
-      <div className="card make-agent">
+      <div className="mk">
         <label>
           <span className="small">Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="perf-checker" />
@@ -165,20 +167,22 @@ function MakeAgent({ onMade }: { onMade: () => void }) {
           <span className="small">What it is for (Claude Code reads this to know when to use it)</span>
           <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Finds slow pages and heavy queries, with numbers." />
         </label>
-        <label>
+        <label className="wide">
           <span className="small">How it works (its instructions)</span>
           <textarea rows={6} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={'You are the performance checker on this project.\n1. …\nReport: …'} />
         </label>
-        <fieldset>
-          <legend className="small">Tools it may use</legend>
+        <fieldset className="wide">
+          <legend>Tools it may use</legend>
+          <div className="chk">
           {TOOLS.map((t) => (
-            <label key={t} className="check">
+            <label key={t}>
               <input type="checkbox" checked={tools.includes(t)} onChange={(e) => setTools(e.target.checked ? [...tools, t] : tools.filter((x) => x !== t))} />
               {t}
             </label>
           ))}
+          </div>
         </fieldset>
-        <div className="make-bar">
+        <div className="mk-bar wide">
           <span className="small">{state.ok ? <span className="plus">{state.ok}</span> : state.error ? <span className="minus">{state.error}</span> : <span className="muted">Saved as ~/.claude/agents/&lt;name&gt;.md. Never overwrites.</span>}</span>
           <button type="button" className="btn btn-primary" disabled={state.busy || !name.trim()} onClick={() => void save()}>
             Save agent

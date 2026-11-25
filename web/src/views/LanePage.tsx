@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Overview, SessionSummary } from '../../../src/core/types'
 import { get, serialLoader, useChanges } from '../api'
-import { ago, STATUS_WORD } from '../format'
-import { useNow } from '../parts/ui'
+import { ago } from '../format'
+import { PlanProgress, Status, useNow } from '../parts/ui'
 
 const REFRESH_MS = 10_000
 
@@ -25,7 +25,7 @@ export function LanePage({ onError }: { onError: (e: unknown) => void }) {
     <div className="page">
       <header className="head">
         <h1>Pit lane</h1>
-        <p className="muted">Every agent out right now. Moving crew means working; an amber light means it waits for you.</p>
+        <p>Every agent out right now, one box each. Moving marks mean working; a solid blue dot means it waits for you.</p>
       </header>
       {data.live.length ? (
         <ol className="lane">
@@ -34,7 +34,7 @@ export function LanePage({ onError }: { onError: (e: unknown) => void }) {
           ))}
         </ol>
       ) : (
-        <p className="muted lane-empty">The pit lane is quiet: no agent is out right now.</p>
+        <p className="empty">The pit lane is quiet: no agent is out right now.</p>
       )}
     </div>
   )
@@ -42,24 +42,22 @@ export function LanePage({ onError }: { onError: (e: unknown) => void }) {
 
 function PitBox({ s, box, project, now }: { s: SessionSummary; box: number; project: string; now: number }) {
   return (
-    <li>
-      <a className={`pitbox pitbox-${s.status}`} href={`#/s/${s.id}`}>
-        <span className="pitbox-top">
-          <span className="pitbox-no">{String(box).padStart(2, '0')}</span>
-          <span className="pitbox-light" aria-hidden="true" />
-          <span className="pitbox-state">{STATUS_WORD[s.status]}</span>
-        </span>
-        <span className="pitbox-crew" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
-        <span className="name clamp-2">{s.title}</span>
-        <span className="muted small clamp-2">
-          {project} · {s.now}
-        </span>
-        <span className="muted small">{ago(s.lastAt, now)}</span>
+    <li className={`box box-${s.status}`}>
+      <span className="box-h">
+        <span className="box-n">Box {String(box).padStart(2, '0')}</span>
+        <span>{project}</span>
+      </span>
+      <span className="box-st">
+        <Status status={s.status} />
+      </span>
+      <a className="box-t" href={`#/s/${s.id}`}>
+        {s.title}
       </a>
+      <span className="box-s">{s.now}</span>
+      <span className="box-f">
+        {s.plan?.length ? <PlanProgress items={s.plan} /> : <span />}
+        <span>{ago(s.lastAt, now)}</span>
+      </span>
     </li>
   )
 }
