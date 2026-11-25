@@ -153,7 +153,12 @@ function Feed({ items, now }: { items: ActivityItem[]; now: number }) {
             <span className="ft">
               {FEED_WORD[a.kind] ? <b>{FEED_WORD[a.kind]}: </b> : null}
               {a.title}
-              {a.failed ? <span className="flag flag-failed"> failed</span> : null}
+              {a.failed ? (
+                <>
+                  {' · '}
+                  <span className="flag flag-failed">failed</span>
+                </>
+              ) : null}
             </span>
           </a>
         </li>
