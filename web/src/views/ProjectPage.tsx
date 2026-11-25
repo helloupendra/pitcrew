@@ -50,7 +50,7 @@ export function ProjectPage({ id, onError }: { id: string; onError: (e: unknown)
   return (
     <div className="page">
       <header className="head">
-        <a className="back" href="#/">
+        <a className="back" href="#/wall">
           ← All projects
         </a>
         <h1>{project.name}</h1>

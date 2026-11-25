@@ -138,6 +138,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       return send(res, 200, {
         ...o,
         live,
+        earlier: o.earlier.map(withTalk),
         counts: { ...o.counts, working: count('working'), waiting: count('waiting'), yourTurn: count('your-turn') },
         root: source.root,
         demo: opts.demo,

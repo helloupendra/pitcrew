@@ -19,6 +19,8 @@ const RECENT_MS = 10 * 60_000
 const MAX_OPEN_READERS = 6
 /** Lines in the feed across all projects, and how many each session may add. */
 const FEED_ITEMS = 40
+/** Idle sessions listed after the live ones, newest first. */
+const EARLIER_ITEMS = 40
 const FEED_PER_SESSION = 8
 /** Steps worth a line in the feed: reading files and plan updates would drown the rest. */
 const FEED_KINDS = new Set<StepKind>(['you', 'agent', 'edit', 'write', 'run', 'search', 'web', 'helper', 'ask', 'note'])
@@ -163,11 +165,16 @@ export class ClaudeCodeSource {
       .slice(0, FEED_ITEMS)
 
     const live = summaries.filter((s) => s.status !== 'idle').sort(byUrgency)
+    const earlier = summaries
+      .filter((s) => s.status === 'idle')
+      .sort((a, b) => b.lastAt.localeCompare(a.lastAt))
+      .slice(0, EARLIER_ITEMS)
     const count = (st: SessionStatus) => summaries.filter((s) => s.status === st).length
     const weekAgo = new Date(this.clock() - 7 * DAY_MS).toISOString()
     return {
       projects,
       live,
+      earlier,
       recent,
       counts: {
         working: count('working'),
