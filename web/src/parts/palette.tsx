@@ -57,7 +57,8 @@ export function Palette() {
       location.hash = hash
     }
     const list: Item[] = [
-      { key: 'home', label: 'Pit wall', hint: 'page', run: go('#/') },
+      { key: 'sessions', label: 'Sessions', hint: 'page', run: go('#/') },
+      { key: 'wall', label: 'Pit wall', hint: 'page', run: go('#/wall') },
       { key: 'lane', label: 'Pit lane', hint: 'page', run: go('#/lane') },
       { key: 'crew', label: 'Crew', hint: 'page', run: go('#/crew') },
     ]

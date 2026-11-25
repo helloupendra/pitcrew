@@ -157,6 +157,8 @@ export interface SessionDetail {
 export interface Overview {
   projects: Project[]
   live: SessionSummary[]
+  /** Idle sessions, newest first, up to 40: the "Earlier" group of the session list. */
+  earlier: SessionSummary[]
   recent: ActivityItem[]
   counts: { working: number; waiting: number; yourTurn: number; activeProjects: number }
   root: string

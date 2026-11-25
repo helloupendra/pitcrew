@@ -4,7 +4,7 @@ import { ApiError, get, serialLoader, useChanges } from '../api'
 import { ago, clock, dayLabel, plural, tilde } from '../format'
 import { isMessage, MessageStep, StepRow } from '../parts/StepRow'
 import { AskCard, SessionTalk } from '../parts/talk'
-import { Changes, Plan, Status, useNow } from '../parts/ui'
+import { Changes, Plan, PlanProgress, Status, useNow } from '../parts/ui'
 
 const REFRESH_MS = 10_000
 /** Within this distance of the bottom, new steps keep the page scrolled to the latest. */
@@ -12,13 +12,21 @@ const FOLLOW_PX = 160
 /** A session started from the page may need a few seconds before its file exists. */
 const STARTING_TRIES = 30
 
-export function SessionPage({ id, onError }: { id: string; onError: (e: unknown) => void }) {
+/**
+ * One session in the Paddock panes: its title in the centre's head, the conversation in the centre,
+ * the permission card and the message box under it, and the context (right now, plan, files, cost,
+ * commands, where it lives) on the right. Renders four grid children of `.work`, so the panes line up
+ * with the session list.
+ */
+export function SessionPane({ id, onError }: { id: string; onError: (e: unknown) => void }) {
   const [detail, setDetail] = useState<SessionDetail>()
   const [steps, setSteps] = useState<Step[]>([])
   const [hasEarlier, setHasEarlier] = useState(false)
   const [open, setOpen] = useState<Set<string>>(new Set())
   const [loadingEarlier, setLoadingEarlier] = useState(false)
+  const [ctxOpen, setCtxOpen] = useState(false)
   const stepsRef = useRef<Step[]>([])
+  const tl = useRef<HTMLElement>(null)
   const follow = useRef(true)
   const scrollToEnd = useRef(true)
   const missing = useRef(0)
@@ -26,6 +34,22 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
   const now = useNow()
 
   stepsRef.current = steps
+  /** The timeline scrolls in its own pane on wide screens, and with the page on a phone. */
+  const scroller = (): HTMLElement => {
+    const el = tl.current
+    return el && getComputedStyle(el).overflowY === 'auto' ? el : document.documentElement
+  }
+  const nearBottom = () => {
+    const el = scroller()
+    const top = el === document.documentElement ? window.scrollY : el.scrollTop
+    const height = el === document.documentElement ? window.innerHeight : el.clientHeight
+    return el.scrollHeight - (top + height) < FOLLOW_PX
+  }
+  const toEnd = () => {
+    const el = scroller()
+    if (el === document.documentElement) window.scrollTo({ top: el.scrollHeight })
+    else el.scrollTop = el.scrollHeight
+  }
 
   const load = useMemo(
     () =>
@@ -40,10 +64,9 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
           if (after === undefined) {
             setSteps(d.steps)
             setHasEarlier(d.hasEarlier)
-            // Wide screens open at the latest step (the side column keeps the status in view);
-            // phones open at the top, where the status and the plan are.
-            scrollToEnd.current = !narrow()
-            follow.current = !narrow()
+            // The conversation opens at its latest step, like any chat.
+            scrollToEnd.current = true
+            follow.current = true
           } else {
             setSteps((prev) => [...prev.filter((s) => s.n < after), ...d.steps])
           }
@@ -60,6 +83,7 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
           onError(e)
         }
       }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [id, onError],
   )
 
@@ -77,23 +101,28 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
 
   useLayoutEffect(() => {
     if (scrollToEnd.current || follow.current) {
-      window.scrollTo({ top: document.documentElement.scrollHeight })
+      toEnd()
       scrollToEnd.current = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [steps])
 
   const loadEarlier = async () => {
     const first = steps[0]
     if (!first) return
     setLoadingEarlier(true)
-    const before = document.documentElement.scrollHeight
+    const el = scroller()
+    const before = el.scrollHeight
     try {
       const r = await get<{ steps: Step[]; hasEarlier: boolean }>(`/api/sessions/${id}/earlier?before=${first.n}`)
       follow.current = false
       setSteps((prev) => [...r.steps, ...prev])
       setHasEarlier(r.hasEarlier)
       // Keep the step you were looking at in place.
-      requestAnimationFrame(() => window.scrollBy({ top: document.documentElement.scrollHeight - before }))
+      requestAnimationFrame(() => {
+        if (el === document.documentElement) window.scrollBy({ top: el.scrollHeight - before })
+        else el.scrollTop += el.scrollHeight - before
+      })
     } catch (e) {
       onError(e)
     } finally {
@@ -118,25 +147,62 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
     requestAnimationFrame(() => document.getElementById(`step-${last.n}`)?.scrollIntoView({ block: 'center' }))
   }
 
-  if (!detail) return <p className="muted pad">{starting ? 'Starting the session…' : 'Loading…'}</p>
+  if (!detail) {
+    return (
+      <header className="sh">
+        <div className="col">
+          <a className="back" href="#/">
+            ← Sessions
+          </a>
+          <p className="muted">{starting ? 'Starting the session…' : 'Loading…'}</p>
+        </div>
+      </header>
+    )
+  }
   const { summary: s, project } = detail
   const asking = new Set((detail.asks ?? []).map((a) => a.toolUseId).filter(Boolean))
 
   return (
-    <div className="page session">
-      <SessionHead detail={detail} back />
-
-      <div className="split">
-        <section className="timeline" aria-label="What happened">
-          <a className="jump" href="#latest" onClick={jumpToLatest}>
-            Jump to the latest step ↓
+    <>
+      <header className="sh">
+        <div className="col">
+          <a className="back" href="#/">
+            ← Sessions
           </a>
+          <SessionHead detail={detail} />
+        </div>
+      </header>
+
+      <aside className={`ctx${ctxOpen ? ' open' : ''}`} aria-label="About this session">
+        <div className="col">
+          <SessionContext
+            detail={detail}
+            now={now}
+            onFile={showFile}
+            projectPath={project.path}
+            status={s.status}
+            toggle={
+              <button type="button" className="ctx-tog" aria-expanded={ctxOpen} onClick={() => setCtxOpen((o) => !o)}>
+                {s.plan?.length ? 'Plan, files and cost' : 'Files and cost'}
+              </button>
+            }
+          />
+        </div>
+      </aside>
+
+      <section className="tl" ref={tl} tabIndex={0} aria-label="What happened">
+        <div className="col">
           {hasEarlier && (
             <button type="button" className="earlier" onClick={loadEarlier} disabled={loadingEarlier}>
               {loadingEarlier ? 'Loading…' : 'Show earlier steps'}
             </button>
           )}
           <Timeline sessionId={id} steps={steps} open={open} onToggle={toggle} asking={asking} now={now} />
+        </div>
+      </section>
+
+      <footer className="foot">
+        <div className="col">
           {detail.asks?.map((a) => (
             <AskCard key={a.id} ask={a} onDone={load} />
           ))}
@@ -148,30 +214,22 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
               load()
             }}
           />
-          <span id="latest" />
-        </section>
-
-        <aside className="side" aria-label="About this session">
-          <SessionContext detail={detail} now={now} onFile={showFile} projectPath={project.path} status={s.status} />
-        </aside>
-      </div>
-    </div>
+        </div>
+      </footer>
+    </>
   )
 }
 
 /** Title, then project · branch · model · when it started. */
-export function SessionHead({ detail, back }: { detail: SessionDetail; back?: boolean }) {
+export function SessionHead({ detail }: { detail: SessionDetail }) {
   const { summary: s, project } = detail
   return (
-    <header className="sess-head">
-      {back && (
-        <a className="back" href={`#/p/${encodeURIComponent(project.id)}`}>
-          ← {project.name}
-        </a>
-      )}
+    <>
       <h1>{s.title}</h1>
       <p>
-        <b title={tilde(project.path)}>{project.name}</b>
+        <a className="plink" href={`#/p/${encodeURIComponent(project.id)}`} title={tilde(project.path)}>
+          {project.name}
+        </a>
         {s.branch ? (
           <>
             {' · '}
@@ -181,7 +239,7 @@ export function SessionHead({ detail, back }: { detail: SessionDetail; back?: bo
         {s.model ? ` · ${s.model}` : ''}
         {s.startedAt ? ` · started ${clock(s.startedAt)}` : ''}
       </p>
-    </header>
+    </>
   )
 }
 
@@ -236,12 +294,15 @@ export function SessionContext({
   onFile,
   projectPath,
   status,
+  toggle,
 }: {
   detail: SessionDetail
   now: number
   onFile: (path: string) => void
   projectPath: string
   status: SessionSummary['status']
+  /** On narrower screens only "Right now" shows, and this button opens the rest. */
+  toggle?: React.ReactNode
 }) {
   const { summary: s, files, commands } = detail
   const where = whereItLives(detail.talk, status)
@@ -252,9 +313,16 @@ export function SessionContext({
         <div className="now-g">
           <Status status={s.status} />
           <span className="now-w">{ago(s.lastAt, now)}</span>
+          {s.plan?.length ? (
+            <span className="now-p">
+              <PlanProgress items={s.plan} />
+            </span>
+          ) : null}
           <p className="now-t">{s.now}</p>
+          {toggle}
         </div>
       </section>
+      <div className="more">
       {s.plan?.length ? (
         <section className="cs">
           <h2>
@@ -307,6 +375,7 @@ export function SessionContext({
         {where.note ? <p className="hint">{where.note}</p> : null}
       </section>
       {detail.partial && <p className="hint">A long session: these count the part loaded so far.</p>}
+      </div>
     </>
   )
 }
@@ -320,12 +389,7 @@ export function whereItLives(talk: TalkInfo | undefined, status: SessionSummary[
   return { place: 'Claude Code, outside Pitcrew', note: talk.why }
 }
 
-function jumpToLatest(e: React.MouseEvent): void {
-  e.preventDefault() // the address bar keeps the session's route
-  window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })
-}
 
-const narrow = () => window.matchMedia('(max-width: 820px)').matches
 
 function usd(n: number): string {
   if (n > 0 && n < 0.01) return 'under $0.01'
@@ -339,10 +403,6 @@ function compact(n: number): string {
   return String(n)
 }
 
-function nearBottom(): boolean {
-  const el = document.documentElement
-  return el.scrollHeight - (window.scrollY + window.innerHeight) < FOLLOW_PX
-}
 
 function shortFile(path: string, root: string): string {
   return path.startsWith(root + '/') ? path.slice(root.length + 1) : tilde(path)

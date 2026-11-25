@@ -1020,58 +1020,6 @@ input[type='checkbox'] {
 
 /* ------------------------------------------------------- a session, its steps */
 
-.sess-head {
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
-}
-.sess-head h1 {
-  font-size: 16px;
-  font-weight: 650;
-  line-height: 1.35;
-  letter-spacing: -0.005em;
-  overflow-wrap: anywhere;
-}
-.sess-head p {
-  margin-top: 2px;
-  font-size: 12.5px;
-  color: var(--ink-2);
-  overflow-wrap: anywhere;
-}
-.sess-head p b {
-  font-weight: 600;
-  color: var(--ink);
-}
-.split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  column-gap: 36px;
-  align-items: start;
-}
-.side {
-  position: sticky;
-  top: calc(var(--top) + 8px);
-  min-width: 0;
-  font-size: 13px;
-}
-.timeline {
-  min-width: 0;
-  padding-top: 4px;
-}
-.jump,
-.earlier {
-  display: inline-block;
-  margin: 10px 0 0;
-  padding: 3px 9px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: none;
-  font-size: 12.5px;
-  color: var(--ink-2);
-  text-decoration: none;
-}
-.jump {
-  display: none;
-}
 .m {
   margin-top: 16px;
 }
@@ -1366,7 +1314,7 @@ button.st[aria-expanded='true'] .car::before {
 .cs {
   padding-top: 16px;
 }
-.cs:first-child {
+.cs.now {
   padding-top: 0;
 }
 .cs h2 {
@@ -1533,19 +1481,8 @@ button.st[aria-expanded='true'] .car::before {
 /* ------------------------------------------------------------------- widths */
 
 @media (max-width: 1000px) {
-  .wall,
-  .split {
+  .wall {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .side {
-    position: static;
-    order: -1;
-    margin-top: 12px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--line);
-  }
-  .jump {
-    display: inline-block;
   }
 }
 
@@ -1668,6 +1605,342 @@ button.st[aria-expanded='true'] .car::before {
   }
   .pal-bg {
     padding-top: 8vh;
+  }
+}
+
+/* ------------------------------------------- the three panes: list, session, context */
+
+.work {
+  display: grid;
+  grid-template-columns: 296px minmax(0, 1fr) 304px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'list head ctx' 'list tl ctx' 'list foot ctx';
+  height: calc(100vh - var(--top));
+  height: calc(100dvh - var(--top));
+}
+.list {
+  grid-area: list;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+}
+.sh {
+  grid-area: head;
+  min-width: 0;
+  padding: 13px 28px 11px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.ctx {
+  grid-area: ctx;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 16px 18px 22px;
+  border-left: 1px solid var(--line);
+  font-size: 13px;
+}
+.tl {
+  grid-area: tl;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 4px 28px 16px;
+  background: var(--paper);
+  outline-offset: -2px;
+}
+.foot {
+  grid-area: foot;
+  min-width: 0;
+  padding: 6px 28px 14px;
+  background: var(--paper);
+}
+.col {
+  max-width: 720px;
+  min-width: 0;
+  margin: 0 auto;
+}
+.ctx .col {
+  max-width: none;
+}
+.list,
+.ctx,
+.tl {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+/* left: every session */
+.list-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 12px 2px 16px;
+}
+.list-h h2 {
+  font-size: 13px;
+  font-weight: 650;
+}
+.grp {
+  padding: 10px 8px 0;
+}
+.grp h3 {
+  padding: 0 8px 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.grp h3 span {
+  margin-left: 5px;
+  font-weight: 400;
+}
+.it {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  column-gap: 9px;
+  row-gap: 1px;
+  align-items: start;
+  padding: 7px 9px 8px;
+  border-radius: 8px;
+  text-decoration: none;
+  outline-offset: -2px;
+}
+.it:hover {
+  background: var(--hover);
+}
+.it[aria-current] {
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.it .g {
+  margin-top: 5px;
+}
+.it-t {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.38;
+  overflow-wrap: anywhere;
+}
+.it-waiting .it-t {
+  font-weight: 650;
+}
+.it-w {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.it-s {
+  grid-column: 2 / 4;
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+  margin-top: auto;
+  padding: 14px 16px 12px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* middle: the session, conversation first */
+.sh h1 {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  overflow-wrap: anywhere;
+}
+.sh p {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.sh code {
+  font-size: 12px;
+}
+.plink {
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+.plink:hover {
+  text-decoration: underline;
+}
+.sh .back {
+  display: none;
+  margin-bottom: 4px;
+}
+.earlier {
+  display: inline-block;
+  margin: 10px 0 0;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: none;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.foot .ask {
+  margin: 0 0 8px;
+}
+.foot .composer {
+  margin-top: 0;
+}
+.foot .talk-off {
+  margin: 4px 0;
+}
+.now-p,
+.ctx-tog {
+  display: none;
+}
+.ctx-tog {
+  order: 1;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: none;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.ctx-tog::after {
+  content: '';
+  width: 5px;
+  height: 5px;
+  margin-top: -3px;
+  border-right: 1.5px solid;
+  border-bottom: 1.5px solid;
+  transform: rotate(45deg);
+}
+.ctx-tog[aria-expanded='true']::after {
+  margin-top: 3px;
+  transform: rotate(-135deg);
+}
+.now-t {
+  order: 2;
+}
+
+/* two panes: the context folds into a strip above the conversation */
+@media (max-width: 1179px) {
+  .work {
+    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-areas: 'list head' 'list ctx' 'list tl' 'list foot';
+  }
+  .ctx {
+    max-height: 52vh;
+    padding: 9px 28px 10px;
+    border-left: 0;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper);
+  }
+  .ctx .col {
+    max-width: 720px;
+  }
+  .now {
+    padding-top: 0;
+  }
+  .now h2 {
+    display: none;
+  }
+  .now-w {
+    margin-left: 0;
+  }
+  .now-p,
+  .ctx-tog {
+    display: inline-flex;
+  }
+  .more {
+    display: none;
+    columns: 2;
+    column-gap: 36px;
+    padding-bottom: 6px;
+  }
+  .more .cs {
+    break-inside: avoid;
+  }
+  .ctx.open .more {
+    display: block;
+  }
+}
+
+/* one pane: the list, then the session with a back link */
+@media (max-width: 759px) {
+  .keys {
+    display: none;
+  }
+  .work {
+    display: block;
+    height: auto;
+  }
+  .work.is-list > :not(.list),
+  .work.is-sess > .list {
+    display: none;
+  }
+  .work.is-sess {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - var(--top));
+    min-height: calc(100dvh - var(--top));
+  }
+  .list {
+    overflow: visible;
+    padding-bottom: 28px;
+    border-right: 0;
+  }
+  .it {
+    padding: 9px 9px 10px;
+  }
+  .is-list .it[aria-current] {
+    background: none;
+    box-shadow: none;
+  }
+  .sh .back {
+    display: inline-block;
+  }
+  .sh {
+    padding: 9px 16px 10px;
+  }
+  .ctx {
+    max-height: none;
+    overflow: visible;
+    padding: 9px 16px 10px;
+  }
+  .more {
+    columns: 1;
+  }
+  .tl {
+    flex: 1;
+    overflow: visible;
+    padding: 0 16px 18px;
+  }
+  .ctx-tog {
+    order: 3;
+    margin: 3px 0 0;
+  }
+  .foot {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    padding: 8px 12px 10px;
+    border-top: 1px solid var(--line);
+  }
+  .composer textarea {
+    min-height: 40px;
   }
 }
 

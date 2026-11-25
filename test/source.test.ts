@@ -68,6 +68,10 @@ describe('ClaudeCodeSource', () => {
       ['Finished one', 'your-turn'],
     ])
     expect(o.counts).toEqual({ working: 1, waiting: 1, yourTurn: 1, activeProjects: 2 })
+    // the idle ones, newest first, for the session list's "Earlier" group
+    expect(o.earlier.map((s) => s.status)).toEqual(o.earlier.map(() => 'idle'))
+    expect(o.earlier.length).toBe(2)
+    expect(o.earlier.map((s) => s.lastAt)).toEqual([...o.earlier.map((s) => s.lastAt)].sort().reverse())
     // the newest steps of every session, newest first
     expect(o.recent[0]).toMatchObject({ project: 'shop', session: 'Working one', kind: 'run', title: 'Build' })
     expect(o.recent.map((r) => r.at)).toEqual([...o.recent.map((r) => r.at)].sort().reverse())

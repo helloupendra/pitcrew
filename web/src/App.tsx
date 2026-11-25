@@ -2,22 +2,24 @@ import { useCallback, useEffect, useState } from 'react'
 import { AuthError, connect } from './api'
 import { useWaitingAlerts } from './parts/alerts'
 import { Palette } from './parts/palette'
-import { Mark, Message } from './parts/ui'
+import { useOverview } from './overview'
+import { Glyph, Mark, Message } from './parts/ui'
 import { CrewPage } from './views/CrewPage'
 import { LanePage } from './views/LanePage'
 import { Home } from './views/Home'
 import { ProjectPage } from './views/ProjectPage'
-import { SessionPage } from './views/SessionPage'
+import { SessionsView } from './views/SessionsView'
 
-type Route = { page: 'home' } | { page: 'crew' } | { page: 'lane' } | { page: 'project'; id: string } | { page: 'session'; id: string }
+type Route = { page: 'sessions'; id?: string } | { page: 'wall' } | { page: 'crew' } | { page: 'lane' } | { page: 'project'; id: string }
 
 function readRoute(): Route {
   if (location.hash === '#/crew') return { page: 'crew' }
   if (location.hash === '#/lane') return { page: 'lane' }
+  if (location.hash === '#/wall') return { page: 'wall' }
   const [, kind, id] = /^#\/(p|s)\/(.+)$/.exec(location.hash) ?? []
   if (kind === 'p' && id) return { page: 'project', id: decodeURIComponent(id) }
-  if (kind === 's' && id) return { page: 'session', id }
-  return { page: 'home' }
+  if (kind === 's' && id) return { page: 'sessions', id }
+  return { page: 'sessions' }
 }
 
 type Theme = 'system' | 'light' | 'dark'
@@ -43,6 +45,8 @@ export function App() {
   const [problem, setProblem] = useState<string>()
   const [theme, setTheme] = useState<Theme>(savedTheme)
   const alerts = useWaitingAlerts()
+  const overview = useOverview()
+  const waiting = overview?.counts.waiting ?? 0
 
   useEffect(() => {
     const onHash = () => {
@@ -83,10 +87,10 @@ export function App() {
       </Message>
     )
   } else if (route.page === 'project') body = <ProjectPage id={route.id} onError={onError} />
-  else if (route.page === 'session') body = <SessionPage id={route.id} onError={onError} />
+  else if (route.page === 'wall') body = <Home onError={onError} />
   else if (route.page === 'crew') body = <CrewPage onError={onError} />
   else if (route.page === 'lane') body = <LanePage onError={onError} />
-  else body = <Home onError={onError} />
+  else body = <SessionsView id={route.id} onError={onError} />
 
   return (
     <>
@@ -100,7 +104,17 @@ export function App() {
           <span>{connected ? 'Live' : 'Reconnecting…'}</span>
         </span>
         <nav className="nav" aria-label="Pages">
-          <a href="#/" aria-current={route.page === 'home' ? 'page' : undefined}>
+          <a href="#/" aria-current={route.page === 'sessions' ? 'page' : undefined}>
+            Sessions
+            {waiting ? (
+              <span className="nb">
+                <Glyph status="waiting" />
+                <span className="nb-n">{waiting}</span>
+                <span className="sr"> waiting for you</span>
+              </span>
+            ) : null}
+          </a>
+          <a href="#/wall" aria-current={route.page === 'wall' ? 'page' : undefined}>
             Pit wall
           </a>
           <a href="#/lane" aria-current={route.page === 'lane' ? 'page' : undefined}>
