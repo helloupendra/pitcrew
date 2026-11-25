@@ -2,6 +2,7 @@ import { useRef, useState, type KeyboardEvent } from 'react'
 import type { Ask, TalkInfo } from '../../../src/core/types'
 import { post } from '../api'
 import { Diff } from './StepRow'
+import { Glyph } from './ui'
 
 /** A question from the agent: it wants to do something and waits for your answer. */
 export function AskCard({ ask, onDone }: { ask: Ask; onDone: () => void }) {
@@ -16,17 +17,22 @@ export function AskCard({ ask, onDone }: { ask: Ask; onDone: () => void }) {
     }
   }
   return (
-    <div className="ask" role="alert">
-      <p className="ask-head">Wants your OK</p>
-      <p className="ask-title">{ask.title}</p>
-      {ask.command && <pre className="code">$ {ask.command}</pre>}
-      {ask.diff && ask.diff.length > 0 && <Diff lines={ask.diff} />}
-      <div className="ask-buttons">
-        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => answer(true)}>
-          Allow
+    <div className="ask" role="alert" data-ask={ask.id}>
+      <div className="ask-b">
+        <p className="ask-h">
+          <Glyph status="waiting" />
+          Wants your OK
+        </p>
+        <p className="ask-t">{ask.title}</p>
+        {ask.command && <pre className="code">$ {ask.command}</pre>}
+        {ask.diff && ask.diff.length > 0 && <Diff lines={ask.diff} />}
+      </div>
+      <div className="ask-a">
+        <button type="button" className="btn" data-answer="deny" disabled={busy} onClick={() => answer(false)}>
+          Deny <kbd>d</kbd>
         </button>
-        <button type="button" className="btn" disabled={busy} onClick={() => answer(false)}>
-          Deny
+        <button type="button" className="btn btn-go" data-answer="allow" disabled={busy} onClick={() => answer(true)}>
+          Allow <kbd>a</kbd>
         </button>
       </div>
     </div>
@@ -85,7 +91,7 @@ export function Composer({ placeholder, disabled, note, sendLabel = 'Send', busy
         aria-label={placeholder}
       />
       <div className="composer-bar">
-        <span className="muted small">{error ? <span className="minus">{error}</span> : note ?? 'Enter to send · Shift+Enter for a new line'}</span>
+        <span className="note">{error ? <span className="minus">{error}</span> : note ?? 'Enter to send · Shift+Enter for a new line'}</span>
         <span className="composer-actions">
           {extra}
           <button type="button" className="btn btn-primary" disabled={disabled || sending || !text.trim()} onClick={() => void send()}>
@@ -100,7 +106,7 @@ export function Composer({ placeholder, disabled, note, sendLabel = 'Send', busy
 /** The message box under a session's timeline, with Stop when Pitcrew is running it. */
 export function SessionTalk({ id, talk, onSent }: { id: string; talk?: TalkInfo; onSent: () => void }) {
   const [stopping, setStopping] = useState(false)
-  if (!talk?.enabled) return <p className="muted small talk-off">{talk?.why ?? 'Talk is off.'}</p>
+  if (!talk?.enabled) return <p className="talk-off">{talk?.why ?? 'Talk is off.'}</p>
 
   const running = talk.here && (talk.state === 'working' || talk.state === 'starting')
   const stop = async () => {

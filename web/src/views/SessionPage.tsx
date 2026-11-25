@@ -1,8 +1,8 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { SessionDetail, Step } from '../../../src/core/types'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { SessionDetail, SessionSummary, Step, TalkInfo } from '../../../src/core/types'
 import { ApiError, get, serialLoader, useChanges } from '../api'
 import { ago, clock, dayLabel, plural, tilde } from '../format'
-import { StepRow } from '../parts/StepRow'
+import { isMessage, MessageStep, StepRow } from '../parts/StepRow'
 import { AskCard, SessionTalk } from '../parts/talk'
 import { Changes, Plan, Status, useNow } from '../parts/ui'
 
@@ -119,22 +119,12 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
   }
 
   if (!detail) return <p className="muted pad">{starting ? 'Starting the session…' : 'Loading…'}</p>
-  const { summary: s, project, files, commands } = detail
+  const { summary: s, project } = detail
   const asking = new Set((detail.asks ?? []).map((a) => a.toolUseId).filter(Boolean))
-  const facts = [s.branch, s.model, s.startedAt ? `started ${clock(s.startedAt)}` : undefined].filter(Boolean).join(' · ')
 
   return (
     <div className="page session">
-      <header className="head">
-        <a className="back" href={`#/p/${encodeURIComponent(project.id)}`}>
-          ← {project.name}
-        </a>
-        <h1>{s.title}</h1>
-        <p className="muted small">
-          <span className="mono">{tilde(project.path)}</span>
-          {facts ? ` · ${facts}` : ''}
-        </p>
-      </header>
+      <SessionHead detail={detail} back />
 
       <div className="split">
         <section className="timeline" aria-label="What happened">
@@ -146,22 +136,7 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
               {loadingEarlier ? 'Loading…' : 'Show earlier steps'}
             </button>
           )}
-          <ol className="steps">
-            {steps.map((step, i) => {
-              const day = step.at ? new Date(step.at).toDateString() : ''
-              const newDay = day && day !== (steps[i - 1]?.at ? new Date(steps[i - 1]!.at).toDateString() : '')
-              return (
-                <Fragment key={step.id}>
-                  {newDay && (i > 0 || day !== new Date(now).toDateString()) ? (
-                    <li className="day" aria-hidden="true">
-                      {dayLabel(step.at)}
-                    </li>
-                  ) : null}
-                  <StepRow sessionId={id} step={step} open={open.has(step.id)} onToggle={() => toggle(step.id)} asking={asking.has(step.id)} />
-                </Fragment>
-              )
-            })}
-          </ol>
+          <Timeline sessionId={id} steps={steps} open={open} onToggle={toggle} asking={asking} now={now} />
           {detail.asks?.map((a) => (
             <AskCard key={a.id} ask={a} onDone={load} />
           ))}
@@ -176,48 +151,173 @@ export function SessionPage({ id, onError }: { id: string; onError: (e: unknown)
           <span id="latest" />
         </section>
 
-        <aside className="side">
-          <section className={`now now-${s.status}`} aria-live="polite">
-            <div className="now-line">
-              <Status status={s.status} />
-              <span className="muted when-ago">{ago(s.lastAt, now)}</span>
-            </div>
-            <p className="now-text">{s.now}</p>
-            {s.plan?.length ? <Plan items={s.plan} /> : null}
-          </section>
-          <h2 className="section">{files.length ? plural(files.length, 'file') + ' changed' : 'No files changed'}</h2>
-          {files.length > 0 && (
-            <ul className="files">
-              {files.map((f) => (
-                <li key={f.path}>
-                  <button type="button" onClick={() => showFile(f.path)} title={f.path}>
-                    <span className="mono file-name">{shortFile(f.path, project.path)}</span>
-                    {f.created && <span className="tag">new</span>}
-                    <Changes added={f.added} removed={f.removed} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {s.costUSD !== undefined || s.tokens ? (
-            <>
-              <h2 className="section">Cost</h2>
-              <p className="small" title="Claude Code's own estimate at API prices. On a subscription you do not pay this per session.">
-                {s.costUSD !== undefined ? usd(s.costUSD) : 'not known'}
-                {s.tokens ? <span className="muted"> · {compact(s.tokens)} tokens</span> : null}
-              </p>
-            </>
-          ) : null}
-          <h2 className="section">Commands</h2>
-          <p className="small">
-            {plural(commands.total, 'command')}
-            {commands.failed ? <span className="minus"> · {commands.failed} failed</span> : null}
-          </p>
-          {detail.partial && <p className="muted small">A long session: these count the part loaded so far.</p>}
+        <aside className="side" aria-label="About this session">
+          <SessionContext detail={detail} now={now} onFile={showFile} projectPath={project.path} status={s.status} />
         </aside>
       </div>
     </div>
   )
+}
+
+/** Title, then project · branch · model · when it started. */
+export function SessionHead({ detail, back }: { detail: SessionDetail; back?: boolean }) {
+  const { summary: s, project } = detail
+  return (
+    <header className="sess-head">
+      {back && (
+        <a className="back" href={`#/p/${encodeURIComponent(project.id)}`}>
+          ← {project.name}
+        </a>
+      )}
+      <h1>{s.title}</h1>
+      <p>
+        <b title={tilde(project.path)}>{project.name}</b>
+        {s.branch ? (
+          <>
+            {' · '}
+            <code>{s.branch}</code>
+          </>
+        ) : null}
+        {s.model ? ` · ${s.model}` : ''}
+        {s.startedAt ? ` · started ${clock(s.startedAt)}` : ''}
+      </p>
+    </header>
+  )
+}
+
+/** Messages in full; the tool steps between two messages folded into one run. */
+export function Timeline({
+  sessionId,
+  steps,
+  open,
+  onToggle,
+  asking,
+  now,
+}: {
+  sessionId: string
+  steps: Step[]
+  open: Set<string>
+  onToggle: (id: string) => void
+  asking: Set<string | undefined>
+  now: number
+}) {
+  const out: React.ReactNode[] = []
+  let run: React.ReactNode[] = []
+  const flush = () => {
+    if (run.length) out.push(<ol className="run" key={`run-${out.length}`}>{run}</ol>)
+    run = []
+  }
+  steps.forEach((step, i) => {
+    const day = step.at ? new Date(step.at).toDateString() : ''
+    const prev = steps[i - 1]?.at ? new Date(steps[i - 1]!.at).toDateString() : ''
+    if (day && day !== prev && (i > 0 || day !== new Date(now).toDateString())) {
+      flush()
+      out.push(
+        <p className="day" key={`day-${step.id}`}>
+          {dayLabel(step.at)}
+        </p>,
+      )
+    }
+    if (isMessage(step)) {
+      flush()
+      out.push(<MessageStep key={step.id} sessionId={sessionId} step={step} />)
+    } else {
+      run.push(<StepRow key={step.id} sessionId={sessionId} step={step} open={open.has(step.id)} onToggle={() => onToggle(step.id)} asking={asking.has(step.id)} />)
+    }
+  })
+  flush()
+  return <div className="tlc">{out}</div>
+}
+
+/** Right now, the plan, files, cost, commands and where the session lives. */
+export function SessionContext({
+  detail,
+  now,
+  onFile,
+  projectPath,
+  status,
+}: {
+  detail: SessionDetail
+  now: number
+  onFile: (path: string) => void
+  projectPath: string
+  status: SessionSummary['status']
+}) {
+  const { summary: s, files, commands } = detail
+  const where = whereItLives(detail.talk, status)
+  return (
+    <>
+      <section className="cs now" aria-live="polite">
+        <h2>Right now</h2>
+        <div className="now-g">
+          <Status status={s.status} />
+          <span className="now-w">{ago(s.lastAt, now)}</span>
+          <p className="now-t">{s.now}</p>
+        </div>
+      </section>
+      {s.plan?.length ? (
+        <section className="cs">
+          <h2>
+            Plan
+            <span>
+              {s.plan.filter((p) => p.status === 'completed').length} of {s.plan.length}
+            </span>
+          </h2>
+          <Plan items={s.plan} />
+        </section>
+      ) : null}
+      <section className="cs">
+        <h2>
+          {files.length ? 'Files changed' : 'No files changed'}
+          {files.length ? <span>{files.length}</span> : null}
+        </h2>
+        {files.length > 0 && (
+          <ul className="fl">
+            {files.map((f) => (
+              <li key={f.path}>
+                <button type="button" onClick={() => onFile(f.path)} title={`${f.path}: show the change`}>
+                  <span className="fn">{shortFile(f.path, projectPath)}</span>
+                  {f.created && <span className="tag">new</span>}
+                  <Changes added={f.added} removed={f.removed} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      {s.costUSD !== undefined || s.tokens ? (
+        <section className="cs">
+          <h2>Cost</h2>
+          <p className="fact" title="Claude Code's own estimate at API prices. On a subscription you do not pay this per session.">
+            {s.costUSD !== undefined ? usd(s.costUSD) : 'not known'}
+            {s.tokens ? <span> · {compact(s.tokens)} tokens</span> : null}
+          </p>
+        </section>
+      ) : null}
+      <section className="cs">
+        <h2>Commands</h2>
+        <p className="fact">
+          {plural(commands.total, 'command')}
+          {commands.failed ? <span className="minus"> · {commands.failed} failed</span> : null}
+        </p>
+      </section>
+      <section className="cs">
+        <h2>Where it lives</h2>
+        <p className="fact">{where.place}</p>
+        {where.note ? <p className="hint">{where.note}</p> : null}
+      </section>
+      {detail.partial && <p className="hint">A long session: these count the part loaded so far.</p>}
+    </>
+  )
+}
+
+/** Who holds this session: Pitcrew, another window, or nobody. Said up front, so a message goes where you expect. */
+export function whereItLives(talk: TalkInfo | undefined, status: SessionSummary['status']): { place: string; note?: string } {
+  if (!talk?.enabled) return { place: status === 'idle' ? 'Nobody (idle)' : 'Claude Code, outside Pitcrew', note: talk?.why }
+  if (talk.here) return { place: 'Pitcrew (this page)', note: talk.state ? `Its run is ${talk.state}.` : undefined }
+  if (!talk.canReply && talk.canCopy) return { place: 'Another window (VS Code or a terminal)', note: talk.why }
+  if (talk.canReply) return { place: 'Nobody (idle)', note: 'Sending continues it here, with your own Claude Code.' }
+  return { place: 'Claude Code, outside Pitcrew', note: talk.why }
 }
 
 function jumpToLatest(e: React.MouseEvent): void {

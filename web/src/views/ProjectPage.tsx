@@ -4,7 +4,7 @@ import { get, post, serialLoader, useChanges } from '../api'
 import { ago, plural, tilde } from '../format'
 import { Composer } from '../parts/talk'
 import { runAgent } from './CrewPage'
-import { Activity, Changes, Status, useNow } from '../parts/ui'
+import { Activity, Changes, PlanProgress, Status, useNow } from '../parts/ui'
 
 const REFRESH_MS = 10_000
 /** One click runs a crew member on this project with its usual task. */
@@ -54,12 +54,17 @@ export function ProjectPage({ id, onError }: { id: string; onError: (e: unknown)
           ← All projects
         </a>
         <h1>{project.name}</h1>
-        <p className="muted small">
-          <span className="mono">{tilde(project.path)}</span>
-          {project.branch ? ` · ${project.branch}` : ''}
+        <p>
+          <code>{tilde(project.path)}</code>
+          {project.branch ? (
+            <>
+              {' · '}
+              <code>{project.branch}</code>
+            </>
+          ) : null}
           {project.uncommitted === undefined ? '' : ` · ${project.uncommitted ? plural(project.uncommitted, 'uncommitted file') : 'nothing uncommitted'}`}
         </p>
-        <p className="head-activity muted small">
+        <p className="head-facts">
           <Activity days={project.activity} now={now} /> {plural(sessions.length, 'session')}
         </p>
         {data.talk && !composing && (
@@ -69,7 +74,7 @@ export function ProjectPage({ id, onError }: { id: string; onError: (e: unknown)
             </button>
             <span className="muted small">Run the crew:</span>
             {QUICK.map(([agent, label]) => (
-              <button key={agent} type="button" className="btn" disabled={starting !== undefined} onClick={() => void quick(agent)}>
+              <button key={agent} type="button" className="btn btn-sm" disabled={starting !== undefined} onClick={() => void quick(agent)}>
                 {starting === agent ? 'Starting…' : label}
               </button>
             ))}
@@ -98,18 +103,22 @@ export function ProjectPage({ id, onError }: { id: string; onError: (e: unknown)
         </section>
       )}
 
+      <h2 className="section">Sessions</h2>
       <ul className="rows">
         {sessions.map((s) => (
           <li key={s.id}>
-            <a className="row live" href={`#/s/${s.id}`}>
-              <Status status={s.status} />
-              <span className="row-main">
-                <span className="name">{s.title}</span>
-                <span className="muted small">{s.now}</span>
+            <a className="lr" href={`#/s/${s.id}`}>
+              <span className="lr-st">
+                <Status status={s.status} />
+                <span className="lr-w">{ago(s.lastAt, now)}</span>
               </span>
-              <span className="row-meta">
+              <span className="lr-m">
+                <span className="nm">{s.title}</span>
+                <span className="sub">{s.now}</span>
+              </span>
+              <span className="lr-p">{s.plan?.length ? <PlanProgress items={s.plan} /> : null}</span>
+              <span className="lr-c">
                 <Changes added={s.linesAdded} removed={s.linesRemoved} />
-                <span className="muted when-ago">{ago(s.lastAt, now)}</span>
               </span>
             </a>
           </li>

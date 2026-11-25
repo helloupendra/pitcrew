@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { DiffLine, Step } from '../../../src/core/types'
 import { withKey } from '../api'
 import { clockParts } from '../format'
-import { Changes, Plan } from './ui'
+import { Changes, Glyph, Plan } from './ui'
 
 interface Props {
   sessionId: string
@@ -13,52 +13,53 @@ interface Props {
   asking?: boolean
 }
 
-/** Messages are shown in full; everything else is one line that opens to show the detail. */
-export function StepRow({ sessionId, step, open, onToggle, asking }: Props) {
-  if (step.kind === 'you' || step.kind === 'agent') {
-    return (
-      <li className={`step msg msg-${step.kind}`} id={`step-${step.n}`}>
-        <When at={step.at} />
-        <div className="body">
-          <span className="who">{step.kind === 'you' ? 'You' : 'Agent'}</span>
-          <p className="text">{step.text ?? step.title}</p>
-          {step.images ? <Pictures sessionId={sessionId} step={step} /> : null}
-        </div>
-      </li>
-    )
-  }
+export const isMessage = (s: Step): boolean => s.kind === 'you' || s.kind === 'agent'
 
+/** A message from you or the agent, shown in full. */
+export function MessageStep({ sessionId, step }: { sessionId: string; step: Step }) {
+  return (
+    <article className={`m m-${step.kind}`} id={`step-${step.n}`}>
+      <p className="m-h">
+        <b>{step.kind === 'you' ? 'You' : 'Agent'}</b>
+        <When at={step.at} />
+      </p>
+      <p className="m-t">{step.text ?? step.title}</p>
+      {step.images ? <Pictures sessionId={sessionId} step={step} /> : null}
+    </article>
+  )
+}
+
+/** A tool step: one line that opens to show the detail. Lives in an <ol className="run">. */
+export function StepRow({ sessionId, step, open, onToggle, asking }: Props) {
   const detail = hasDetail(step)
   const state = step.pending ? (asking ? 'asking' : 'running') : step.failed ? 'failed' : undefined
-  const FLAG = { running: 'running…', asking: 'waiting for your OK', failed: 'failed' }
+  const FLAG = { running: 'running', asking: 'wants your OK', failed: 'failed' }
   const head = (
     <>
-      <span className="title">{step.title}</span>
+      <span className="car" aria-hidden="true" />
+      <span className="st-t">{step.title}</span>
       <Changes added={step.added} removed={step.removed} />
-      {state && <span className={`flag flag-${state}`}>{FLAG[state]}</span>}
+      {state && (
+        <span className={`flag flag-${state}`}>
+          {state === 'running' ? <Glyph status="working" /> : state === 'asking' ? <Glyph status="waiting" /> : null}
+          {FLAG[state]}
+        </span>
+      )}
+      <When at={step.at} />
     </>
   )
 
   return (
-    <li className={`step tool kind-${step.kind}${step.failed ? ' is-failed' : ''}`} id={`step-${step.n}`}>
-      <When at={step.at} />
-      <div className="body">
-        {detail ? (
-          <button type="button" className="line" aria-expanded={open} onClick={onToggle}>
-            <span className="caret" aria-hidden="true">
-              {open ? '▾' : '▸'}
-            </span>
-            {head}
-          </button>
-        ) : (
-          <div className="line">
-            <span className="caret" aria-hidden="true" />
-            {head}
-          </div>
-        )}
-        {step.images ? <Pictures sessionId={sessionId} step={step} /> : null}
-        {open && detail && <Detail step={step} />}
-      </div>
+    <li id={`step-${step.n}`} className={step.failed ? 'st-failed' : undefined}>
+      {detail ? (
+        <button type="button" className="st" aria-expanded={open} onClick={onToggle}>
+          {head}
+        </button>
+      ) : (
+        <div className="st">{head}</div>
+      )}
+      {step.images ? <Pictures sessionId={sessionId} step={step} /> : null}
+      {open && detail && <Detail step={step} />}
     </li>
   )
 }
@@ -80,13 +81,8 @@ function Pictures({ sessionId, step }: { sessionId: string; step: Step }) {
 
 /** The time only; the timeline marks each new day with its own line. */
 function When({ at }: { at: string }) {
-  const { hm, sec } = clockParts(at)
-  return (
-    <time className="when" dateTime={at}>
-      {hm}
-      <span className="sec">{sec}</span>
-    </time>
-  )
+  const { hm } = clockParts(at)
+  return <time dateTime={at}>{hm}</time>
 }
 
 function hasDetail(s: Step): boolean {
@@ -95,12 +91,12 @@ function hasDetail(s: Step): boolean {
 
 function Detail({ step }: { step: Step }) {
   return (
-    <div className="detail">
+    <div className="dt">
       {step.plan && <Plan items={step.plan} />}
       {step.kind === 'note' || step.kind === 'ask' || step.kind === 'helper' ? step.text && <p className="text">{step.text}</p> : null}
       {step.command && <pre className="code">$ {step.command}</pre>}
       {step.diff && <Diff lines={step.diff} />}
-      {step.output && <pre className={`code output${step.failed ? ' is-failed' : ''}`}>{step.output}</pre>}
+      {step.output && <pre className={`code${step.failed ? ' is-failed' : ''}`}>{step.output}</pre>}
     </div>
   )
 }
@@ -112,15 +108,13 @@ export function Diff({ lines }: { lines: DiffLine[] }) {
         l.t === '~' ? (
           <span key={i} className="d-gap">
             {l.s || '⋯'}
-            {'\n'}
           </span>
         ) : (
           <span key={i} className={l.t === '+' ? 'd-add' : l.t === '-' ? 'd-del' : 'd-ctx'}>
             <span className="d-mark" aria-hidden="true">
-              {l.t}
+              {l.t === '-' ? '−' : l.t === '+' ? '+' : ' '}
             </span>
             {l.s}
-            {'\n'}
           </span>
         ),
       )}
